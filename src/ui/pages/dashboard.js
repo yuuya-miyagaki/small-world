@@ -1,6 +1,7 @@
 import { listAgents, getAgent } from '../../core/agent.js';
 import { listChannels, subscribeToChannel, sendMessage, handleAgentResponse } from '../../core/messageBus.js';
 import { startHeartbeatLoop, stopAllHeartbeats } from '../../core/autonomy.js';
+import { startDiscussion, generateReport } from '../../core/collective.js';
 import { getWorld } from '../../services/worldService.js';
 import { signOut } from '../../services/authService.js';
 import { navigate } from '../router.js';
@@ -105,6 +106,30 @@ function renderDashboardUI(state) {
       <main class="chat-panel">
         <div class="chat-header">
           <span class="chat-header-title"># ${state.selectedChannel?.name || 'general'}</span>
+          <button class="btn btn-discussion" id="startDiscussionBtn" title="エージェント同士の議論を開始">
+            🗣️ 議論開始
+          </button>
+        </div>
+
+        <!-- Discussion Modal -->
+        <div id="discussionModal" class="discussion-modal" style="display: none;">
+          <div class="discussion-modal-content">
+            <h3>🗣️ 議論テーマを入力</h3>
+            <p class="discussion-desc">3人のエージェントが2ラウンドにわたり議論します。</p>
+            <textarea id="discussionTheme" class="discussion-input" placeholder="例: AIが人間の仕事を奪うのか、新しい仕事を作るのか" rows="3"></textarea>
+            <div class="discussion-actions">
+              <button class="btn btn-ghost" id="cancelDiscussion">キャンセル</button>
+              <button class="btn btn-primary" id="confirmDiscussion">議論を開始</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discussion Progress -->
+        <div id="discussionProgress" class="discussion-progress" style="display: none;">
+          <div class="discussion-progress-bar">
+            <div class="discussion-progress-fill" id="progressFill"></div>
+          </div>
+          <span id="progressText" class="discussion-progress-text">準備中...</span>
         </div>
         <div class="chat-messages" id="chatMessages">
           <div class="empty-state">
@@ -461,6 +486,9 @@ function bindDashboardEvents(state) {
     chatInput.style.height = 'auto';
     chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
   });
+
+  // Discussion engine
+  bindDiscussionEvents(state);
 }
 
 function setupRealtimeListeners(state) {
@@ -551,4 +579,134 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ==========================================
+// 議論エンジン UI
+// ==========================================
+
+function bindDiscussionEvents(state) {
+  const startBtn = document.getElementById('startDiscussionBtn');
+  const modal = document.getElementById('discussionModal');
+  const cancelBtn = document.getElementById('cancelDiscussion');
+  const confirmBtn = document.getElementById('confirmDiscussion');
+  const themeInput = document.getElementById('discussionTheme');
+
+  startBtn?.addEventListener('click', () => {
+    if (modal) modal.style.display = 'flex';
+    themeInput?.focus();
+  });
+
+  cancelBtn?.addEventListener('click', () => {
+    if (modal) modal.style.display = 'none';
+    if (themeInput) themeInput.value = '';
+  });
+
+  confirmBtn?.addEventListener('click', async () => {
+    const theme = themeInput?.value.trim();
+    if (!theme) return;
+
+    if (modal) modal.style.display = 'none';
+    await runDiscussion(state, theme);
+  });
+
+  themeInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      confirmBtn?.click();
+    }
+  });
+}
+
+async function runDiscussion(state, theme) {
+  const progressEl = document.getElementById('discussionProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const startBtn = document.getElementById('startDiscussionBtn');
+  const chatMessages = document.getElementById('chatMessages');
+
+  // UIを議論モードに
+  if (progressEl) progressEl.style.display = 'flex';
+  if (startBtn) startBtn.disabled = true;
+
+  try {
+    // 議論実行
+    const session = await startDiscussion(state.worldId, theme, {
+      onProgress: ({ step, total, agentName, round }) => {
+        const pct = Math.round((step / total) * 100);
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (progressText) progressText.textContent = `ラウンド${round}: ${agentName} が発言中... (${step}/${total})`;
+      },
+    });
+
+    // レポート生成
+    if (progressText) progressText.textContent = 'レポートを生成中...';
+    if (progressFill) progressFill.style.width = '90%';
+
+    const report = await generateReport(session);
+
+    if (progressFill) progressFill.style.width = '100%';
+
+    // 議論結果をチャットに表示
+    if (chatMessages) {
+      const discussionHtml = renderDiscussionResult(session, report);
+      chatMessages.innerHTML += discussionHtml;
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Firestoreにもメッセージとして保存（チャット履歴に残す）
+    await sendMessage(state.worldId, state.selectedChannel.id, {
+      content: `🗣️ 議論テーマ: ${theme}`,
+      senderId: state.user.uid,
+      senderName: 'System',
+      senderType: 'system',
+    });
+
+  } catch (error) {
+    console.error('[Discussion] Failed:', error);
+    if (progressText) progressText.textContent = `❌ 議論に失敗しました: ${error.message}`;
+  } finally {
+    // UI復帰
+    setTimeout(() => {
+      if (progressEl) progressEl.style.display = 'none';
+      if (startBtn) startBtn.disabled = false;
+      // ハートビート再開
+      setupHeartbeats(state);
+    }, 2000);
+  }
+}
+
+function renderDiscussionResult(session, report) {
+  const roundsHtml = session.rounds.map((round) => {
+    const contribs = round.contributions.map((c) => `
+      <div class="discussion-contribution">
+        <div class="discussion-speaker">
+          <strong>${c.agentName}</strong>
+          <span class="discussion-role">${c.role}</span>
+        </div>
+        <div class="discussion-text">${escapeHtml(c.content)}</div>
+      </div>
+    `).join('');
+
+    return `
+      <div class="discussion-round">
+        <div class="discussion-round-header">ラウンド ${round.roundNumber}</div>
+        ${contribs}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="discussion-result">
+      <div class="discussion-result-header">
+        <span class="discussion-result-icon">🗣️</span>
+        <span>議論: ${escapeHtml(session.theme)}</span>
+      </div>
+      ${roundsHtml}
+      <div class="discussion-report">
+        <div class="discussion-report-header">📋 レポート</div>
+        <div class="discussion-report-content">${escapeHtml(report).replace(/\n/g, '<br>')}</div>
+      </div>
+    </div>
+  `;
 }
