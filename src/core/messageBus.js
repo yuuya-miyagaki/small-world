@@ -14,7 +14,8 @@ import { getFirebaseDb } from '../config/firebase.js';
 import { chat, analyzeSentiment } from '../services/aiService.js';
 import { generateSystemPrompt } from './personality.js';
 import { addShortTermMemory, getRecentMemories, recallMemories, checkConsolidationNeeded, consolidateMemories } from './memory.js';
-import { getAgent, updateMood, updateRelationship, updateAgent } from './agent.js';
+import { getAgent, updateMood, updateAgent } from './agent.js';
+import { updateBidirectionalRelationship, calculateInteractionDelta } from './relationship.js';
 
 /**
  * チャンネルを作成する
@@ -225,9 +226,17 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     channelId,
   });
 
-  // 10. 関係性更新（会話した相手との親密度微増）
+  // 10. 関係性更新（双方向 + センチメント連動）
   if (incomingMessage.senderId) {
-    await updateRelationship(worldId, agentId, incomingMessage.senderId, 0.02);
+    try {
+      const sentimentResult2 = await analyzeSentiment(responseText).catch(() => null);
+      const sentiment = sentimentResult2?.[0]?.label || 'neutral';
+      const delta = calculateInteractionDelta(sentiment);
+      await updateBidirectionalRelationship(worldId, agentId, incomingMessage.senderId, delta);
+    } catch {
+      // フォールバック: 固定の微増
+      await updateBidirectionalRelationship(worldId, agentId, incomingMessage.senderId, 0.01);
+    }
   }
 
   // 11. 統計更新

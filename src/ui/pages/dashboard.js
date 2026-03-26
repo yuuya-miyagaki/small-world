@@ -126,7 +126,7 @@ function renderDashboardUI(state) {
 
       <!-- Detail Panel -->
       <aside class="detail-panel" id="detailPanel">
-        ${state.selectedAgent ? renderAgentDetail(state.selectedAgent) : renderEmptyDetail()}
+        ${state.selectedAgent ? renderAgentDetail(state.selectedAgent, state.agents) : renderEmptyDetail()}
       </aside>
     </div>
   `;
@@ -167,7 +167,7 @@ function renderChannelList(state) {
   `).join('');
 }
 
-function renderAgentDetail(agent) {
+function renderAgentDetail(agent, allAgents) {
   const p = agent.personality || {};
   const m = agent.mood || {};
 
@@ -215,7 +215,7 @@ function renderAgentDetail(agent) {
 
     <div class="detail-section">
       <div class="detail-section-title">関係性</div>
-      ${renderRelationships(agent)}
+      ${renderRelationships(agent, allAgents)}
     </div>
 
     <div class="detail-section">
@@ -241,21 +241,56 @@ function renderPersonalityBar(label, value) {
   `;
 }
 
-function renderRelationships(agent) {
+function renderRelationships(agent, allAgents) {
   const rels = agent.relationships || {};
   if (Object.keys(rels).length === 0) {
     return '<div style="font-size: var(--text-xs); color: var(--color-text-muted);">まだ交流がありません</div>';
   }
 
-  return Object.entries(rels).map(([id, rel]) => `
-    <div class="relationship-item">
-      <span class="relationship-label">${id.slice(0, 5)}...</span>
-      <div class="relationship-score">
-        <div class="relationship-score-fill" style="width: ${(rel.score ?? 0.5) * 100}%"></div>
+  // エージェント名のマップを作成
+  const agentMap = {};
+  if (allAgents) {
+    for (const a of allAgents) {
+      agentMap[a.id] = a;
+    }
+  }
+
+  const labelColors = {
+    '親密': 'var(--color-success)',
+    '友好的': 'var(--color-info)',
+    '中立': 'var(--color-text-secondary)',
+    '冷淡': 'var(--color-warning)',
+    '敵対的': 'var(--color-error, #ef4444)',
+  };
+
+  return Object.entries(rels).map(([id, rel]) => {
+    const other = agentMap[id];
+    const name = other?.name || id.slice(0, 8);
+    const avatar = other?.avatar || '🤖';
+    const score = rel.score ?? 0.5;
+    const label = getRelLabel(score);
+    const labelColor = labelColors[label] || 'var(--color-text-secondary)';
+
+    return `
+      <div class="relationship-item">
+        <span class="relationship-avatar">${avatar}</span>
+        <span class="relationship-label">${name}</span>
+        <div class="relationship-score">
+          <div class="relationship-score-fill" style="width: ${score * 100}%"></div>
+        </div>
+        <span class="relationship-badge" style="color: ${labelColor}">${label}</span>
       </div>
-      <span class="relationship-value">${Math.round((rel.score ?? 0.5) * 100)}%</span>
-    </div>
-  `).join('');
+    `;
+  }).join('');
+}
+
+/** スコアから関係性ラベルを返す */
+function getRelLabel(score) {
+  if (score <= 0.2) return '敵対的';
+  if (score <= 0.4) return '冷淡';
+  if (score <= 0.6) return '中立';
+  if (score <= 0.8) return '友好的';
+  return '親密';
 }
 
 function renderEmptyDetail() {
@@ -334,7 +369,7 @@ function bindDashboardEvents(state) {
 
       const detailPanel = document.getElementById('detailPanel');
       if (detailPanel && state.selectedAgent) {
-        detailPanel.innerHTML = renderAgentDetail(state.selectedAgent);
+        detailPanel.innerHTML = renderAgentDetail(state.selectedAgent, state.agents);
       }
     });
   });
@@ -438,7 +473,7 @@ function setupRealtimeListeners(state) {
             item.classList.add('active');
             const detailPanel = document.getElementById('detailPanel');
             if (detailPanel && state.selectedAgent) {
-              detailPanel.innerHTML = renderAgentDetail(state.selectedAgent);
+              detailPanel.innerHTML = renderAgentDetail(state.selectedAgent, state.agents);
             }
           });
         });
@@ -451,7 +486,7 @@ function setupRealtimeListeners(state) {
           state.selectedAgent = updated;
           const detailPanel = document.getElementById('detailPanel');
           if (detailPanel) {
-            detailPanel.innerHTML = renderAgentDetail(updated);
+            detailPanel.innerHTML = renderAgentDetail(updated, state.agents);
           }
         }
       }
