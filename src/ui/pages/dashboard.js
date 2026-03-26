@@ -2,6 +2,7 @@ import { listAgents, getAgent } from '../../core/agent.js';
 import { listChannels, subscribeToChannel, sendMessage, handleAgentResponse } from '../../core/messageBus.js';
 import { startHeartbeatLoop, stopAllHeartbeats } from '../../core/autonomy.js';
 import { startDiscussion, generateReport } from '../../core/collective.js';
+import { runPipeline } from '../../core/pipeline.js';
 import { getWorld } from '../../services/worldService.js';
 import { signOut } from '../../services/authService.js';
 import { navigate } from '../router.js';
@@ -107,8 +108,24 @@ function renderDashboardUI(state) {
         <div class="chat-header">
           <span class="chat-header-title"># ${state.selectedChannel?.name || 'general'}</span>
           <button class="btn btn-discussion" id="startDiscussionBtn" title="エージェント同士の議論を開始">
-            🗣️ 議論開始
+            🗣️ 議論
           </button>
+          <button class="btn btn-pipeline" id="startPipelineBtn" title="タスクを分業で実行">
+            ⚙️ タスク
+          </button>
+        </div>
+
+        <!-- Pipeline Modal -->
+        <div id="pipelineModal" class="discussion-modal" style="display: none;">
+          <div class="discussion-modal-content">
+            <h3>⚙️ タスクを入力</h3>
+            <p class="discussion-desc">Kaiが調査 → Miaが執筆 → Rexがレビューして成果物を制作します。</p>
+            <textarea id="pipelineTask" class="discussion-input" placeholder="例: AIの未来について記事を書いて" rows="3"></textarea>
+            <div class="discussion-actions">
+              <button class="btn btn-ghost" id="cancelPipeline">キャンセル</button>
+              <button class="btn btn-primary" id="confirmPipeline">タスク開始</button>
+            </div>
+          </div>
         </div>
 
         <!-- Discussion Modal -->
@@ -489,6 +506,9 @@ function bindDashboardEvents(state) {
 
   // Discussion engine
   bindDiscussionEvents(state);
+
+  // Pipeline engine
+  bindPipelineEvents(state);
 }
 
 function setupRealtimeListeners(state) {
@@ -710,3 +730,114 @@ function renderDiscussionResult(session, report) {
     </div>
   `;
 }
+
+// ==========================================
+// タスクパイプライン UI
+// ==========================================
+
+function bindPipelineEvents(state) {
+  const startBtn = document.getElementById('startPipelineBtn');
+  const modal = document.getElementById('pipelineModal');
+  const cancelBtn = document.getElementById('cancelPipeline');
+  const confirmBtn = document.getElementById('confirmPipeline');
+  const taskInput = document.getElementById('pipelineTask');
+
+  startBtn?.addEventListener('click', () => {
+    if (modal) modal.style.display = 'flex';
+    taskInput?.focus();
+  });
+
+  cancelBtn?.addEventListener('click', () => {
+    if (modal) modal.style.display = 'none';
+    if (taskInput) taskInput.value = '';
+  });
+
+  confirmBtn?.addEventListener('click', async () => {
+    const task = taskInput?.value.trim();
+    if (!task) return;
+
+    if (modal) modal.style.display = 'none';
+    await executePipeline(state, task);
+  });
+
+  taskInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      confirmBtn?.click();
+    }
+  });
+}
+
+async function executePipeline(state, task) {
+  const progressEl = document.getElementById('discussionProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const startBtn = document.getElementById('startPipelineBtn');
+  const chatMessages = document.getElementById('chatMessages');
+
+  if (progressEl) progressEl.style.display = 'flex';
+  if (startBtn) startBtn.disabled = true;
+
+  try {
+    const result = await runPipeline(state.worldId, task, {
+      onProgress: ({ stageName, agentName, step, total }) => {
+        const pct = Math.round((step / total) * 100);
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (progressText) progressText.textContent = `${agentName} が${stageName}中... (${step}/${total})`;
+      },
+    });
+
+    if (progressFill) progressFill.style.width = '100%';
+
+    if (chatMessages) {
+      chatMessages.innerHTML += renderPipelineResult(result);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    await sendMessage(state.worldId, state.selectedChannel.id, {
+      content: `⚙️ タスク完了: ${task}`,
+      senderId: state.user.uid,
+      senderName: 'System',
+      senderType: 'system',
+    });
+
+  } catch (error) {
+    console.error('[Pipeline] Failed:', error);
+    if (progressText) progressText.textContent = `❌ タスクに失敗: ${error.message}`;
+  } finally {
+    setTimeout(() => {
+      if (progressEl) progressEl.style.display = 'none';
+      if (startBtn) startBtn.disabled = false;
+      setupHeartbeats(state);
+    }, 2000);
+  }
+}
+
+function renderPipelineResult(result) {
+  const stagesHtml = result.stages.map((s) => `
+    <div class="pipeline-stage">
+      <div class="pipeline-stage-header">
+        <span class="pipeline-stage-emoji">${s.emoji}</span>
+        <strong>${s.agentName}</strong>
+        <span class="discussion-role">${s.stageName}</span>
+        ${s.isFallback ? '<span class="pipeline-fallback">⚠ フォールバック</span>' : ''}
+      </div>
+      <div class="pipeline-stage-content">${escapeHtml(s.content).replace(/\n/g, '<br>')}</div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="discussion-result pipeline-result">
+      <div class="discussion-result-header" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(59, 130, 246, 0.1));">
+        <span class="discussion-result-icon">⚙️</span>
+        <span>タスク: ${escapeHtml(result.task)}</span>
+      </div>
+      ${stagesHtml}
+      <div class="discussion-report" style="border-top-color: var(--color-success);">
+        <div class="discussion-report-header">✅ 最終成果物</div>
+        <div class="discussion-report-content">${escapeHtml(result.deliverable).replace(/\n/g, '<br>')}</div>
+      </div>
+    </div>
+  `;
+}
+

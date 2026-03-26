@@ -814,3 +814,70 @@
   line-height: 1.6;
 }
 
+/* ===================================
+   Pipeline UI
+   =================================== */
+
+.btn-pipeline {
+  background: linear-gradient(135deg, var(--color-success), #3b82f6);
+  color: white;
+  border: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-pipeline:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.btn-pipeline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pipeline-stage {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.pipeline-stage:last-child {
+  border-bottom: none;
+}
+
+.pipeline-stage-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.pipeline-stage-emoji {
+  font-size: 1.1rem;
+}
+
+.pipeline-stage-header strong {
+  color: var(--color-primary);
+  font-size: 0.85rem;
+}
+
+.pipeline-stage-content {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding-left: var(--space-5);
+}
+
+.pipeline-fallback {
+  font-size: 0.7rem;
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
