@@ -125,7 +125,7 @@ describe('MessageBus Module', () => {
       const options = mockChat.mock.calls[0][1];
       // temperature = 0.6 + openness(0.8) * 0.3 = 0.84
       expect(options.temperature).toBeCloseTo(0.84, 1);
-      expect(options.maxTokens).toBe(256);
+      expect(options.maxTokens).toBe(512);
     });
 
     it('should not throw when API fails and return a valid message', async () => {

@@ -138,6 +138,7 @@ export function subscribeToChannel(worldId, channelId, callback) {
 
 /**
  * エージェントがメッセージに応答するメインフロー
+ * 応答生成→即座投稿→バックグラウンドで感情分析・記憶・関係性更新
  * @param {string} worldId
  * @param {string} agentId - 応答するエージェントのID
  * @param {string} channelId - チャンネルID
@@ -187,30 +188,14 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
   try {
     responseText = await chat(messages, {
       temperature: 0.6 + agent.personality.openness * 0.3,
-      maxTokens: 256,
+      maxTokens: 512,
     });
   } catch (error) {
     console.error(`[MessageBus] Agent ${agent.name} response generation failed:`, error);
     responseText = generateFallbackResponse(agent);
   }
 
-  // 7. 感情分析 → 気分更新
-  try {
-    const sentimentResult = await analyzeSentiment(responseText);
-    const dominantSentiment = sentimentResult[0];
-
-    // 感情分析結果を気分に反映
-    const sentimentScore = parseSentimentScore(dominantSentiment);
-    await updateMood(worldId, agentId, {
-      valence: agent.mood.valence * 0.7 + sentimentScore * 0.3,
-      energy: Math.max(0.1, agent.mood.energy - 0.02),  // 活動ごとに微減
-      dominantEmotion: dominantSentiment?.label || 'neutral',
-    });
-  } catch (error) {
-    console.warn(`[MessageBus] Sentiment analysis failed for ${agent.name}:`, error.message);
-  }
-
-  // 8. 応答をチャンネルに投稿
+  // 7. 応答をチャンネルに即座投稿（ユーザー体験優先）
   const responseMessage = await sendMessage(worldId, channelId, {
     content: responseText,
     senderId: agentId,
@@ -218,7 +203,19 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     senderType: 'agent',
   });
 
-  // 9. 自分の応答も短期記憶に保存
+  // 8. バックグラウンド処理（感情分析・記憶・関係性・統計）
+  processPostResponse(worldId, agentId, channelId, agent, responseText, incomingMessage).catch(
+    (err) => console.warn(`[MessageBus] Background processing failed for ${agent.name}:`, err.message)
+  );
+
+  return responseMessage;
+}
+
+/**
+ * 応答投稿後のバックグラウンド処理
+ */
+async function processPostResponse(worldId, agentId, channelId, agent, responseText, incomingMessage) {
+  // 自分の応答を短期記憶に保存
   await addShortTermMemory(worldId, agentId, {
     content: `${agent.name}: ${responseText}`,
     type: 'conversation',
@@ -226,38 +223,44 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     channelId,
   });
 
-  // 10. 関係性更新（双方向 + センチメント連動）
-  if (incomingMessage.senderId) {
-    try {
-      const sentimentResult2 = await analyzeSentiment(responseText).catch(() => null);
-      const sentiment = sentimentResult2?.[0]?.label || 'neutral';
-      const delta = calculateInteractionDelta(sentiment);
-      await updateBidirectionalRelationship(worldId, agentId, incomingMessage.senderId, delta);
-    } catch {
-      // フォールバック: 固定の微増
-      await updateBidirectionalRelationship(worldId, agentId, incomingMessage.senderId, 0.01);
-    }
+  // 感情分析 → 気分更新 + 関係性更新
+  let sentimentLabel = 'neutral';
+  try {
+    const sentimentResult = await analyzeSentiment(responseText);
+    const dominantSentiment = sentimentResult[0];
+    sentimentLabel = dominantSentiment?.label || 'neutral';
+    const sentimentScore = parseSentimentScore(dominantSentiment);
+    await updateMood(worldId, agentId, {
+      valence: agent.mood.valence * 0.7 + sentimentScore * 0.3,
+      energy: Math.max(0.1, agent.mood.energy - 0.02),
+      dominantEmotion: sentimentLabel,
+    });
+  } catch {
+    // 感情分析失敗時はスキップ
   }
 
-  // 11. 統計更新
+  // 関係性更新
+  if (incomingMessage.senderId) {
+    const delta = calculateInteractionDelta(sentimentLabel);
+    await updateBidirectionalRelationship(worldId, agentId, incomingMessage.senderId, delta);
+  }
+
+  // 統計更新
   await updateAgent(worldId, agentId, {
     'stats.messagesGenerated': (agent.stats?.messagesGenerated || 0) + 1,
   });
 
-  // 12. 記憶統合チェック
+  // 記憶統合チェック
   const needsConsolidation = await checkConsolidationNeeded(worldId, agentId);
   if (needsConsolidation) {
     consolidateMemories(worldId, agentId).catch((err) =>
-      console.warn(`[Memory] Consolidation failed for ${agent.name}:`, err.message)
+      console.warn(`[Memory] Consolidation failed: ${err.message}`)
     );
   }
-
-  return responseMessage;
 }
 
 /**
  * センチメント結果からスコアを抽出する（0.0-1.0）
- * nlptown/bert-base-multilingual-uncased-sentiment は "1 star" ~ "5 stars" を返す
  */
 function parseSentimentScore(sentiment) {
   if (!sentiment) return 0.5;

@@ -9,7 +9,7 @@ const MODELS = {
 // Gemini 2.5 Flash 無料枠は 10 RPM。安全マージンで 3秒間隔を確保
 // テスト環境ではインターバル無効化
 const isTestEnv = typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
-const MIN_INTERVAL_MS = isTestEnv ? 0 : 3000;
+const MIN_INTERVAL_MS = isTestEnv ? 0 : 1000;
 let lastRequestTime = 0;
 const requestQueue = [];
 let isProcessingQueue = false;
