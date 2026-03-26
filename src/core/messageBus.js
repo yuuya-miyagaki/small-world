@@ -11,7 +11,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../config/firebase.js';
-import { chat, analyzeSentiment } from '../services/hfService.js';
+import { chat, analyzeSentiment } from '../services/aiService.js';
 import { generateSystemPrompt } from './personality.js';
 import { addShortTermMemory, getRecentMemories, recallMemories, checkConsolidationNeeded, consolidateMemories } from './memory.js';
 import { getAgent, updateMood, updateRelationship, updateAgent } from './agent.js';
@@ -175,7 +175,7 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
       content: m.content,
     }));
 
-  // 6. HF API で応答生成
+  // 6. Gemini API で応答生成
   const messages = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory,

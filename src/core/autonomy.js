@@ -1,7 +1,7 @@
 import { getAgent, listAgents, updateAgent, updateMood } from './agent.js';
 import { getRecentMemories } from './memory.js';
 import { listChannels, sendMessage, handleAgentResponse } from './messageBus.js';
-import { chat } from '../services/hfService.js';
+import { chat } from '../services/aiService.js';
 import { generateSystemPrompt } from './personality.js';
 
 /** アクティブなハートビートループの管理 */

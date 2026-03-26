@@ -21,14 +21,14 @@ vi.mock('../../src/config/firebase.js', () => ({
   getFirebaseDb: vi.fn(() => ({})),
 }));
 
-// HF サービスモック
-vi.mock('../../src/services/hfService.js', () => ({
+// AI サービスモック
+vi.mock('../../src/services/aiService.js', () => ({
   chat: vi.fn(),
-  analyzeSentiment: vi.fn(() => [{ label: '4 stars', score: 0.7 }]),
+  analyzeSentiment: vi.fn(() => [{ label: 'positive', score: 0.7 }]),
   summarize: vi.fn(() => 'テストサマリー'),
 }));
 
-import { chat as mockChat } from '../../src/services/hfService.js';
+import { chat as mockChat } from '../../src/services/aiService.js';
 import { getDocs, getDoc, setDoc } from 'firebase/firestore';
 
 describe('MessageBus Module', () => {
@@ -73,7 +73,7 @@ describe('MessageBus Module', () => {
       setDoc.mockResolvedValue(undefined);
     });
 
-    it('should call HF chat API with correct message structure', async () => {
+    it('should call Gemini chat API with correct message structure', async () => {
       mockChat.mockResolvedValueOnce('これは面白い研究テーマですね。');
 
       await handleAgentResponse('world-1', 'agent-1', 'channel-1', {
@@ -97,7 +97,7 @@ describe('MessageBus Module', () => {
       expect(lastMsg.content).toContain('こんにちは');
     });
 
-    it('should use fallback when HF API fails', async () => {
+    it('should use fallback when Gemini API fails', async () => {
       mockChat.mockRejectedValueOnce(new Error('API Error'));
 
       const result = await handleAgentResponse('world-1', 'agent-1', 'channel-1', {

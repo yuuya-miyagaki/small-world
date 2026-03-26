@@ -11,7 +11,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../config/firebase.js';
-import { summarize } from '../services/hfService.js';
+import { summarize } from '../services/aiService.js';
 
 /** 短期記憶の統合閾値 */
 const CONSOLIDATION_THRESHOLD = 10;
