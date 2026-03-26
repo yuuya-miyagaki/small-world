@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== Worlds =====
+    match /worlds/{worldId} {
+      // 読み取り: 認証済みユーザーが自分のワールドのみ
+      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      // 新規作成: 認証済みユーザーが自分をオーナーとして設定
+      allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;
+      // 更新・削除: 認証済みユーザーが自分のワールドのみ
+      allow update, delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+
+      // ===== すべてのサブコレクション（再帰的マッチ） =====
+      // agents, channels, channels/messages,
+      // agents/shortTermMemories, agents/longTermMemories 等
+      match /{subPath=**} {
+        allow read, write: if request.auth != null && isWorldOwner(worldId);
+      }
+    }
+
+    // ===== ヘルパー関数 =====
+    function isWorldOwner(worldId) {
+      return get(/databases/$(database)/documents/worlds/$(worldId)).data.ownerId == request.auth.uid;
+    }
+  }
+}
