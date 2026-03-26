@@ -413,15 +413,32 @@ function bindDashboardEvents(state) {
     // Show typing indicator
     showTyping(state.agents.map((a) => a.name).join(', '));
 
-    // Get agent responses
+    // Get agent responses — 会話チェーン方式
+    // Agent 1 → ユーザーに応答
+    // Agent 2 → Agent 1 の応答を踏まえて発言
+    // Agent 3 → Agent 2 の応答を踏まえて発言
+    let lastMessage = {
+      content,
+      senderId: state.user.uid,
+      senderName: state.user.email?.split('@')[0] || 'User',
+      senderType: 'user',
+    };
+
     for (const agent of state.agents) {
       try {
-        await handleAgentResponse(state.worldId, agent.id, state.selectedChannel.id, {
-          content,
-          senderId: state.user.uid,
-          senderName: state.user.email?.split('@')[0] || 'User',
-          senderType: 'user',
-        });
+        const response = await handleAgentResponse(
+          state.worldId,
+          agent.id,
+          state.selectedChannel.id,
+          lastMessage
+        );
+        // 次のエージェントは、このエージェントの応答に対して返答する
+        lastMessage = {
+          content: response.content,
+          senderId: agent.id,
+          senderName: agent.name,
+          senderType: 'agent',
+        };
       } catch (error) {
         console.error(`[Chat] Agent ${agent.name} response failed:`, error);
       }
