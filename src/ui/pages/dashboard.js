@@ -8,8 +8,7 @@ import { signOut } from '../../services/authService.js';
 import { navigate } from '../router.js';
 import { onSnapshot, collection } from 'firebase/firestore';
 import { getFirebaseDb } from '../../config/firebase.js';
-/** エージェント上限数 — agentCreator.js と同値（動的importのため定数を複製） */
-const MAX_AGENTS = 6;
+import { MAX_AGENTS } from '../../config/constants.js';
 
 /** @type {Function|null} */
 let unsubscribeMessages = null;
@@ -952,6 +951,63 @@ function showToast(message, type) {
 }
 
 // ============================================================
+// カスタム確認ダイアログ
+// ============================================================
+
+/**
+ * Promise ベースのカスタム確認ダイアログ。
+ * ダークテーマ対応。ESC / オーバーレイクリックでキャンセル。
+ *
+ * @param {Object} opts
+ * @param {string} opts.title - ダイアログタイトル
+ * @param {string} opts.message - 本文（\n で改行）
+ * @param {string} [opts.confirmText='OK'] - 確認ボタンラベル
+ * @param {string} [opts.cancelText='キャンセル'] - キャンセルラベル
+ * @param {boolean} [opts.danger=false] - true で確認ボタンを赤くする
+ * @returns {Promise<boolean>}
+ */
+function showConfirmDialog({ title, message, confirmText = 'OK', cancelText = 'キャンセル', danger = false }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+
+    const messageHtml = message.replace(/\n/g, '<br>');
+
+    overlay.innerHTML = `
+      <div class="confirm-dialog">
+        <h3 class="confirm-title">${title}</h3>
+        <p class="confirm-message">${messageHtml}</p>
+        <div class="confirm-actions">
+          <button class="confirm-btn-cancel">${cancelText}</button>
+          <button class="confirm-btn-ok ${danger ? 'confirm-btn-danger' : ''}">${confirmText}</button>
+        </div>
+      </div>
+    `;
+
+    const cleanup = (result) => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+    };
+    document.addEventListener('keydown', onKey);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+
+    overlay.querySelector('.confirm-btn-cancel').addEventListener('click', () => cleanup(false));
+    overlay.querySelector('.confirm-btn-ok').addEventListener('click', () => cleanup(true));
+
+    document.body.appendChild(overlay);
+    overlay.querySelector('.confirm-btn-ok').focus();
+  });
+}
+
+// ============================================================
 // Agent Delete 統合
 // ============================================================
 
@@ -969,10 +1025,14 @@ function bindDeleteAgentButton(state) {
     const agentId = deleteBtn.dataset.agentId;
     const agentName = deleteBtn.dataset.agentName;
 
-    // 確認ダイアログ
-    const confirmed = confirm(
-      agentName + ' を削除しますか？\n\nこの操作は取り消せません。\nエージェントの記憶・関係性・統計もすべて失われます。'
-    );
+    // カスタム確認ダイアログ
+    const confirmed = await showConfirmDialog({
+      title: agentName + ' を削除',
+      message: 'この操作は取り消せません。\nエージェントの記憶・関係性・統計もすべて失われます。',
+      confirmText: '削除する',
+      cancelText: 'キャンセル',
+      danger: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -997,7 +1057,7 @@ function bindDeleteAgentButton(state) {
       console.error('[AgentDelete] Failed:', error);
       showToast('削除に失敗しました: ' + error.message, 'error');
       deleteBtn.disabled = false;
-      deleteBtn.textContent = '��️ ' + agentName + ' を削除';
+      deleteBtn.textContent = '🗑️ ' + agentName + ' を削除';
     }
   });
 }

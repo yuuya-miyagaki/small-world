@@ -11,8 +11,10 @@
  *   - buildAgentData() で送信前変換
  */
 
-/** エージェント上限数（ハートビート API 負荷軽減のため） */
-export const MAX_AGENTS = 6;
+import { MAX_AGENTS } from '../../config/constants.js';
+
+// テストが agentCreator.js から MAX_AGENTS を import しているため再エクスポート
+export { MAX_AGENTS };
 
 /**
  * 絵文字グリッド — Unicode 13 以前の1コードポイント絵文字
