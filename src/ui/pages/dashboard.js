@@ -8,7 +8,8 @@ import { signOut } from '../../services/authService.js';
 import { navigate } from '../router.js';
 import { onSnapshot, collection } from 'firebase/firestore';
 import { getFirebaseDb } from '../../config/firebase.js';
-import { renderAgentCreatorModal, MAX_AGENTS } from '../components/agentCreator.js';
+/** エージェント上限数 — agentCreator.js と同値（動的importのため定数を複製） */
+const MAX_AGENTS = 6;
 
 /** @type {Function|null} */
 let unsubscribeMessages = null;
@@ -873,12 +874,15 @@ function bindAddAgentButton(state) {
   const addBtn = document.getElementById('addAgentBtn');
   if (!addBtn) return;
 
-  addBtn.addEventListener('click', () => {
+  addBtn.addEventListener('click', async () => {
     // 上限チェック
     if (state.agents.length >= MAX_AGENTS) {
       showToast('エージェントは最大' + MAX_AGENTS + '体までです', 'error');
       return;
     }
+
+    // 動的 import — モーダルが必要になるまでロードしない
+    const { renderAgentCreatorModal } = await import('../components/agentCreator.js');
 
     renderAgentCreatorModal({
       currentAgentCount: state.agents.length,
