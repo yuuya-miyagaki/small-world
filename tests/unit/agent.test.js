@@ -8,6 +8,7 @@ vi.mock('firebase/firestore', () => ({
   getDoc: vi.fn(),
   getDocs: vi.fn(() => ({ docs: [] })),
   updateDoc: vi.fn(),
+  deleteDoc: vi.fn(),
   query: vi.fn(),
   orderBy: vi.fn(),
   serverTimestamp: vi.fn(() => new Date()),
@@ -17,7 +18,7 @@ vi.mock('../../src/config/firebase.js', () => ({
   getFirebaseDb: vi.fn(() => ({})),
 }));
 
-import { setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 describe('Agent Module', () => {
   let agentModule;
@@ -125,6 +126,45 @@ describe('Agent Module', () => {
       const updateArgs = updateDoc.mock.calls[0][1];
       expect(updateArgs['mood.energy']).toBe(1);
       expect(updateArgs['mood.stress']).toBe(0);
+    });
+  });
+
+  describe('deleteAgent', () => {
+    it('should delete an agent document', async () => {
+      deleteDoc.mockResolvedValue(undefined);
+
+      await agentModule.deleteAgent('world-1', 'agent-to-delete');
+      expect(deleteDoc).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('createAgent with voiceStyle', () => {
+    it('should save voiceStyle when provided', async () => {
+      setDoc.mockResolvedValue(undefined);
+
+      const result = await agentModule.createAgent('world-1', {
+        name: 'VoiceBot',
+        role: 'ボイステスター',
+        voiceStyle: {
+          pronoun: 'あたし',
+          tone: '明るくてポップ',
+          ending: '〜だよ！',
+        },
+      });
+
+      expect(result.voiceStyle).toBeDefined();
+      expect(result.voiceStyle.pronoun).toBe('あたし');
+    });
+
+    it('should have undefined voiceStyle when not provided', async () => {
+      setDoc.mockResolvedValue(undefined);
+
+      const result = await agentModule.createAgent('world-1', {
+        name: 'NoVoice',
+        role: 'テスター',
+      });
+
+      expect(result.voiceStyle).toBeUndefined();
     });
   });
 });

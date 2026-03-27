@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   query,
   orderBy,
@@ -44,6 +45,8 @@ export async function createAgent(worldId, agentData) {
       agreeableness: agentData.personality?.agreeableness ?? 0.5,
       neuroticism: agentData.personality?.neuroticism ?? 0.5,
     },
+    ...(agentData.voiceStyle ? { voiceStyle: agentData.voiceStyle } : {}),
+    isPreset: agentData.isPreset ?? true,
     mood: {
       energy: 0.7,
       stress: 0.3,
@@ -147,4 +150,16 @@ export async function updateRelationship(worldId, agentId, otherAgentId, delta) 
       lastInteraction: new Date().toISOString(),
     },
   });
+}
+
+/**
+ * エージェントを削除する
+ * @param {string} worldId
+ * @param {string} agentId
+ * @returns {Promise<void>}
+ */
+export async function deleteAgent(worldId, agentId) {
+  const db = getFirebaseDb();
+  const docRef = doc(db, `worlds/${worldId}/agents`, agentId);
+  await deleteDoc(docRef);
 }

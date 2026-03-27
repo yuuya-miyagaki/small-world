@@ -1,0 +1,159 @@
+/* ===================================
+   Sidebar — エージェント一覧 + チャンネル
+   =================================== */
+
+.agent-sidebar {
+  background: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  padding: var(--space-4);
+}
+
+.sidebar-title {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+  font-weight: var(--font-weight-semibold);
+}
+
+.agent-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: var(--space-1);
+}
+.agent-item:hover {
+  background: var(--color-bg-hover);
+}
+.agent-item.active {
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.agent-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.agent-status-badge {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-bg-secondary);
+}
+.agent-status-badge.active { background: var(--color-success); }
+.agent-status-badge.idle { background: var(--color-warning); }
+.agent-status-badge.sleeping { background: var(--color-text-muted); }
+
+.agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.agent-role {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* Mood Bars */
+.mood-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.mood-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.mood-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width var(--transition-slow);
+}
+
+.mood-bar-energy .mood-bar-fill {
+  background: linear-gradient(90deg, #34d399, #6ee7b7);
+}
+
+.mood-bar-stress .mood-bar-fill {
+  background: linear-gradient(90deg, #fbbf24, #f87171);
+}
+
+/* Channel List */
+.channel-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+.channel-item:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.channel-item.active {
+  color: var(--color-text-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.channel-hash {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* エージェント追加ボタン */
+.agent-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  transition: all var(--transition-fast);
+  margin-top: var(--space-2);
+}
+.agent-add-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent);
+}

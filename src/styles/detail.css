@@ -1,0 +1,236 @@
+/* ===================================
+   Detail Panel — エージェント詳細
+   =================================== */
+
+.detail-panel {
+  background: var(--color-bg-secondary);
+  border-left: 1px solid var(--color-border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-header {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.detail-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  margin: 0 auto var(--space-3);
+}
+
+.detail-name {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.detail-role {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.detail-section {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detail-section-title {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Personality Radar (simplified bars) */
+.personality-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.personality-bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.personality-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.personality-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.personality-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
+  transition: width var(--transition-slow);
+}
+
+/* Mood Detail */
+.mood-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.mood-detail-item {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mood-detail-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.mood-detail-value {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Relationship List */
+.relationship-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  transition: opacity var(--transition-fast);
+}
+.relationship-item:hover {
+  opacity: 0.85;
+}
+
+.relationship-avatar {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.relationship-score {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.relationship-score-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #f87171, #fbbf24, #34d399);
+  transition: width var(--transition-slow);
+}
+
+.relationship-label {
+  font-size: var(--text-xs);
+  width: 40px;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.relationship-badge {
+  font-size: var(--text-xs);
+  width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.relationship-value {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Activity Log */
+.activity-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.activity-item {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.activity-time {
+  color: var(--color-text-muted);
+  width: 50px;
+  flex-shrink: 0;
+}
+
+.activity-text {
+  color: var(--color-text-secondary);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-8);
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  opacity: 0.5;
+}
+
+.empty-state-text {
+  font-size: var(--text-sm);
+}
+
+/* Loading */
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

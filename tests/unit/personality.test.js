@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateSystemPrompt, describeMood, PRESET_AGENTS } from '../../src/core/personality.js';
+import { generateSystemPrompt, describeMood, PRESET_AGENTS, EXTENDED_PRESETS, getVoiceStyle } from '../../src/core/personality.js';
 
 describe('Personality Module', () => {
   describe('PRESET_AGENTS', () => {
@@ -120,6 +120,61 @@ describe('Personality Module', () => {
     it('should describe positive valence', () => {
       const description = describeMood({ energy: 0.5, stress: 0.2, valence: 0.9 });
       expect(description).toContain('前向き');
+    });
+  });
+
+  describe('EXTENDED_PRESETS', () => {
+    it('should have 3 extended preset agents', () => {
+      expect(EXTENDED_PRESETS).toHaveLength(3);
+    });
+
+    it('Nova should be a designer with very high openness', () => {
+      const nova = EXTENDED_PRESETS.find((a) => a.name === 'Nova');
+      expect(nova).toBeDefined();
+      expect(nova.role).toBe('デザイナー');
+      expect(nova.personality.openness).toBeGreaterThan(0.9);
+    });
+
+    it('Echo should be an analyst with very high conscientiousness', () => {
+      const echo = EXTENDED_PRESETS.find((a) => a.name === 'Echo');
+      expect(echo).toBeDefined();
+      expect(echo.role).toBe('アナリスト');
+      expect(echo.personality.conscientiousness).toBeGreaterThan(0.9);
+    });
+
+    it('Ash should be an engineer with high conscientiousness', () => {
+      const ash = EXTENDED_PRESETS.find((a) => a.name === 'Ash');
+      expect(ash).toBeDefined();
+      expect(ash.role).toBe('エンジニア');
+      expect(ash.personality.conscientiousness).toBeGreaterThan(0.8);
+    });
+
+    it('each extended preset should have valid personality scores', () => {
+      for (const agent of EXTENDED_PRESETS) {
+        expect(agent.name).toBeTruthy();
+        expect(agent.personality.openness).toBeGreaterThanOrEqual(0);
+        expect(agent.personality.openness).toBeLessThanOrEqual(1);
+      }
+    });
+  });
+
+  describe('getVoiceStyle', () => {
+    it('should return known voice style for Kai', () => {
+      const style = getVoiceStyle('Kai');
+      expect(style.pronoun).toBe('僕');
+      expect(style.tone).toBeTruthy();
+    });
+
+    it('should return default voice style for unknown agents', () => {
+      const style = getVoiceStyle('Unknown');
+      expect(style.pronoun).toBe('私');
+    });
+
+    it('should return custom voice style when provided', () => {
+      const custom = { pronoun: 'あたし', tone: '元気', ending: '〜だよ！' };
+      const style = getVoiceStyle('Unknown', custom);
+      expect(style.pronoun).toBe('あたし');
+      expect(style.tone).toBe('元気');
     });
   });
 });

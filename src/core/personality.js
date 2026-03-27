@@ -255,3 +255,65 @@ export const PRESET_AGENTS = [
     },
   },
 ];
+
+/**
+ * 拡張プリセットエージェント定義（追加テンプレート）
+ */
+export const EXTENDED_PRESETS = [
+  {
+    name: 'Nova',
+    role: 'デザイナー',
+    avatar: '🎨',
+    color: '#8b5cf6',
+    personality: {
+      openness: 0.95,
+      conscientiousness: 0.4,
+      extraversion: 0.6,
+      agreeableness: 0.7,
+      neuroticism: 0.5,
+    },
+  },
+  {
+    name: 'Echo',
+    role: 'アナリスト',
+    avatar: '📊',
+    color: '#06b6d4',
+    personality: {
+      openness: 0.6,
+      conscientiousness: 0.95,
+      extraversion: 0.2,
+      agreeableness: 0.5,
+      neuroticism: 0.3,
+    },
+  },
+  {
+    name: 'Ash',
+    role: 'エンジニア',
+    avatar: '⚡',
+    color: '#22c55e',
+    personality: {
+      openness: 0.7,
+      conscientiousness: 0.85,
+      extraversion: 0.4,
+      agreeableness: 0.6,
+      neuroticism: 0.4,
+    },
+  },
+];
+
+/**
+ * エージェントのボイススタイルを取得する
+ * カスタムスタイルが指定されている場合はそれを優先、
+ * 次に名前ベースのプリセット、最後にデフォルトのフォールバック。
+ *
+ * @param {string} agentName - エージェント名
+ * @param {Object} [customStyle] - カスタムボイススタイル
+ * @returns {Object} ボイススタイル { pronoun, tone, ending, examples }
+ */
+export function getVoiceStyle(agentName, customStyle) {
+  if (customStyle && customStyle.pronoun) {
+    return customStyle;
+  }
+  return AGENT_VOICE_STYLES[agentName] || DEFAULT_VOICE_STYLE;
+}
+
