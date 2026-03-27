@@ -1,4 +1,4 @@
-import { listAgents, getAgent, createAgent } from '../../core/agent.js';
+import { listAgents, getAgent, createAgent, deleteAgent } from '../../core/agent.js';
 import { listChannels, subscribeToChannel, sendMessage, handleAgentResponse } from '../../core/messageBus.js';
 import { startHeartbeatLoop, stopAllHeartbeats } from '../../core/autonomy.js';
 import { startDiscussion, generateReport } from '../../core/collective.js';
@@ -276,6 +276,14 @@ function renderAgentDetail(agent, allAgents) {
         <div>🤖 自律行動: ${agent.stats?.autonomousActions || 0}</div>
       </div>
     </div>
+
+    ${!agent.isPreset ? `
+    <div class="detail-section detail-danger-zone">
+      <button class="btn btn-danger btn-delete-agent" data-agent-id="${agent.id}" data-agent-name="${agent.name}">
+        🗑️ ${agent.name} を削除
+      </button>
+    </div>
+    ` : ''}
   `;
 }
 
@@ -524,6 +532,9 @@ function bindDashboardEvents(state) {
 
   // Agent Creator
   bindAddAgentButton(state);
+
+  // Agent Delete
+  bindDeleteAgentButton(state);
 }
 
 function setupRealtimeListeners(state) {
@@ -554,6 +565,7 @@ function setupRealtimeListeners(state) {
             const detailPanel = document.getElementById('detailPanel');
             if (detailPanel && state.selectedAgent) {
               detailPanel.innerHTML = renderAgentDetail(state.selectedAgent, state.agents);
+              bindDeleteAgentButton(state);
             }
           });
         });
@@ -570,6 +582,7 @@ function setupRealtimeListeners(state) {
           const detailPanel = document.getElementById('detailPanel');
           if (detailPanel) {
             detailPanel.innerHTML = renderAgentDetail(updated, state.agents);
+            bindDeleteAgentButton(state);
           }
         }
       }
@@ -936,4 +949,55 @@ function showToast(message, type) {
     toast.style.transition = 'opacity 0.3s ease';
     setTimeout(() => toast.remove(), 300);
   }, 3000);
+}
+
+// ============================================================
+// Agent Delete 統合
+// ============================================================
+
+/**
+ * 🗑️ エージェント削除ボタンのバインド
+ * 詳細パネル再レンダリング後にも呼ばれるため、冪等に設計。
+ *
+ * @param {Object} state - ダッシュボード状態
+ */
+function bindDeleteAgentButton(state) {
+  const deleteBtn = document.querySelector('.btn-delete-agent');
+  if (!deleteBtn) return;
+
+  deleteBtn.addEventListener('click', async () => {
+    const agentId = deleteBtn.dataset.agentId;
+    const agentName = deleteBtn.dataset.agentName;
+
+    // 確認ダイアログ
+    const confirmed = confirm(
+      agentName + ' を削除しますか？\n\nこの操作は取り消せません。\nエージェントの記憶・関係性・統計もすべて失われます。'
+    );
+    if (!confirmed) return;
+
+    try {
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = '削除中...';
+
+      await deleteAgent(state.worldId, agentId);
+      console.log('[AgentDelete] Deleted:', agentName);
+
+      // 選択状態をクリア
+      state.selectedAgent = null;
+      const detailPanel = document.getElementById('detailPanel');
+      if (detailPanel) {
+        detailPanel.innerHTML = renderEmptyDetail();
+      }
+
+      // トースト通知
+      showToast(agentName + ' を削除しました', 'info');
+
+      // onSnapshot が自動的にサイドバーを再レンダリングする
+    } catch (error) {
+      console.error('[AgentDelete] Failed:', error);
+      showToast('削除に失敗しました: ' + error.message, 'error');
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = '��️ ' + agentName + ' を削除';
+    }
+  });
 }

@@ -234,3 +234,33 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Danger Zone — エージェント削除 */
+.detail-danger-zone {
+  border-bottom: none;
+  margin-top: auto;
+  padding-top: var(--space-6);
+}
+
+.btn-delete-agent {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: transparent;
+}
+
+.btn-delete-agent:hover {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.btn-delete-agent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

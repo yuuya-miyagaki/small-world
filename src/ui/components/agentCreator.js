@@ -159,7 +159,9 @@ export function buildAgentData(state) {
     avatar: state.avatar,
     color: state.color,
     personality: { ...state.personality },
-    isPreset: state.isPreset,
+    // ユーザー作成エージェントは常にカスタム扱い
+    // （プリセットテンプレートは初期値の補助であり、作成後は isPreset: false）
+    isPreset: false,
   };
 
   // voiceStyle は少なくとも1フィールドが入力されている場合のみ含める

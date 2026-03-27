@@ -208,6 +208,18 @@ describe('AgentCreator Module', () => {
       expect(data.role).toBe('デザイナー');
       expect(data.voiceStyle.pronoun).toBe('あたし');
     });
+
+    it('should set isPreset to false even when form state has isPreset true (from preset)', () => {
+      const state = createFormState();
+      const preset = PRESET_AGENTS.find((p) => p.name === 'Kai');
+      const presetState = applyPreset(state, preset);
+      // applyPreset sets isPreset: true on form state
+      expect(presetState.isPreset).toBe(true);
+
+      // buildAgentData should always produce isPreset: false
+      const data = buildAgentData(presetState);
+      expect(data.isPreset).toBe(false);
+    });
   });
 
   // ============================================
