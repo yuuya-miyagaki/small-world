@@ -64,3 +64,44 @@
   background: var(--color-success);
   animation: pulse 2s ease-in-out infinite;
 }
+
+/* ===================================
+   Streaming Message Styles
+   =================================== */
+
+.streaming-message {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.streaming-content {
+  min-height: 1.2em;
+}
+
+.streaming-cursor {
+  display: inline;
+  animation: blink 0.8s step-end infinite;
+  color: var(--color-text-accent, #818cf8);
+  font-weight: bold;
+}
+
+.streaming-badge {
+  font-size: var(--text-xs, 0.7rem);
+  color: var(--color-text-accent, #818cf8);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

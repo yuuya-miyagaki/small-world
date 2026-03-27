@@ -469,13 +469,7 @@ function bindDashboardEvents(state) {
         senderType: 'user',
       });
 
-      // Show typing indicator
-      showTyping(state.agents.map((a) => a.name).join(', '));
-
-      // Get agent responses — 会話チェーン方式
-      // Agent 1 → ユーザーに応答
-      // Agent 2 → Agent 1 の応答を踏まえて発言
-      // Agent 3 → Agent 2 の応答を踏まえて発言
+      // Get agent responses — 会話チェーン方式 + ストリーミング表示
       let lastMessage = {
         content,
         senderId: state.user.uid,
@@ -484,13 +478,31 @@ function bindDashboardEvents(state) {
       };
 
       for (const agent of state.agents) {
+        // 仮メッセージをDOMに挿入（ストリーミング用）
+        const streamId = `stream-${agent.id}-${Date.now()}`;
+        const chatMessages = document.getElementById('chatMessages');
+        appendStreamingPlaceholder(chatMessages, streamId, agent);
+
+        // Typing indicator
+        showTyping(agent.name);
+
         try {
           const response = await handleAgentResponse(
             state.worldId,
             agent.id,
             state.selectedChannel.id,
-            lastMessage
+            lastMessage,
+            {
+              onChunk: (chunkText) => {
+                // ストリーミング中: 仮メッセージのテキストを逐次更新
+                updateStreamingMessage(streamId, chunkText);
+              },
+            }
           );
+
+          // ストリーミング完了 → 仮メッセージを除去（onSnapshotが正式版を挿入するため）
+          removeStreamingPlaceholder(streamId);
+
           // 次のエージェントは、このエージェントの応答に対して返答する
           lastMessage = {
             content: response.content,
@@ -500,6 +512,7 @@ function bindDashboardEvents(state) {
           };
         } catch (error) {
           console.error(`[Chat] Agent ${agent.name} response failed:`, error);
+          removeStreamingPlaceholder(streamId);
         }
       }
     } finally {
@@ -625,6 +638,76 @@ function cleanup() {
   if (unsubscribeAgents) { unsubscribeAgents(); unsubscribeAgents = null; }
 }
 
+// ==========================================
+// ストリーミング表示ヘルパー
+// ==========================================
+
+/**
+ * ストリーミング用の仮メッセージをDOMに挿入する
+ * @param {HTMLElement} chatMessages - チャットメッセージコンテナ
+ * @param {string} streamId - ストリーミングメッセージの一意ID
+ * @param {Object} agent - エージェント情報
+ */
+function appendStreamingPlaceholder(chatMessages, streamId, agent) {
+  if (!chatMessages) return;
+
+  const placeholder = document.createElement('div');
+  placeholder.className = 'chat-message streaming-message';
+  placeholder.id = streamId;
+  placeholder.dataset.streaming = 'true';
+  placeholder.innerHTML = `
+    <div class="chat-message-avatar" style="background: ${agent.color || '#6366f1'}20">
+      ${agent.avatar || '🤖'}
+    </div>
+    <div class="chat-message-body">
+      <div class="chat-message-header">
+        <span class="chat-message-name" style="color: var(--color-text-accent)">${agent.name}</span>
+        <span class="chat-message-time streaming-badge">ストリーミング中...</span>
+      </div>
+      <div class="chat-message-content streaming-content"><span class="streaming-cursor">▊</span></div>
+    </div>
+  `;
+  chatMessages.appendChild(placeholder);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * ストリーミング中の仮メッセージにテキストチャンクを追加する
+ * @param {string} streamId - ストリーミングメッセージの一意ID
+ * @param {string} chunkText - 追加するテキストチャンク
+ */
+function updateStreamingMessage(streamId, chunkText) {
+  const el = document.getElementById(streamId);
+  if (!el) return;
+
+  const contentEl = el.querySelector('.streaming-content');
+  if (!contentEl) return;
+
+  // カーソルを除去 → テキスト追加 → カーソルを末尾に再配置
+  const cursor = contentEl.querySelector('.streaming-cursor');
+  if (cursor) cursor.remove();
+
+  contentEl.appendChild(document.createTextNode(chunkText));
+
+  const newCursor = document.createElement('span');
+  newCursor.className = 'streaming-cursor';
+  newCursor.textContent = '▊';
+  contentEl.appendChild(newCursor);
+
+  // 親コンテナを自動スクロール
+  const chatMessages = document.getElementById('chatMessages');
+  if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * ストリーミング完了後に仮メッセージを除去する
+ * （onSnapshotが正式メッセージを挿入するため）
+ * @param {string} streamId - ストリーミングメッセージの一意ID
+ */
+function removeStreamingPlaceholder(streamId) {
+  const el = document.getElementById(streamId);
+  if (el) el.remove();
+}
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
