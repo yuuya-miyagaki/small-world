@@ -110,6 +110,8 @@ export function describeMood(mood) {
  * @param {Object} [context] - 追加コンテキスト
  * @param {Array<Object>} [context.memories] - 関連する記憶
  * @param {Object} [context.relationships] - 関係性情報
+ * @param {string} [context.conversationPhase] - 会話フェーズ
+ * @param {Array<Object>} [context.otherAgents] - 他のエージェント情報
  * @returns {string} システムプロンプト
  */
 export function generateSystemPrompt(agent, context = {}) {
@@ -145,12 +147,28 @@ ${moodText}
 - 時には反論したり、違う角度から意見を言う
 - 相手の名前を呼んで話しかけることがある`;
 
+  // 他エージェント視点参照（Task 3: 追加API callゼロで多角性改善）
+  if (context.otherAgents && context.otherAgents.length > 0) {
+    prompt += `\n\n## 他のメンバーの視点を意識して`;
+    for (const other of context.otherAgents) {
+      if (other.name !== agent.name) {
+        prompt += `\n- ${other.name}（${other.role}）は${describeAgentPerspective(other.role)}の視点を持っている`;
+      }
+    }
+    prompt += `\nあなたは「${agent.role}」の専門家として、彼らとは異なる独自の角度で意見を述べること`;
+  }
+
+  // 会話フェーズ別指示（Task 4: バラエティ改善）
+  const phase = context.conversationPhase || 'discussion';
+  prompt += `\n\n## 今の会話フェーズ: ${PHASE_INSTRUCTIONS[phase] || PHASE_INSTRUCTIONS.discussion}`;
+
   // 記憶コンテキストの追加
   if (context.memories && context.memories.length > 0) {
     prompt += `\n\n## あなたの記憶\n以下は過去の重要な出来事や学びです:\n`;
     for (const memory of context.memories.slice(0, 5)) {
       prompt += `- ${memory.summary || memory.content}\n`;
     }
+    prompt += `\n記憶を自然に会話に織り込むこと。「前に〜って話したよね」のように。`;
   }
 
   // 関係性コンテキストの追加
@@ -164,6 +182,48 @@ ${moodText}
 
   return prompt;
 }
+
+/**
+ * ロールからエージェントの視点を説明する
+ * @param {string} role
+ * @returns {string}
+ */
+function describeAgentPerspective(role) {
+  const perspectives = {
+    リサーチャー: 'データ・論理・根拠に基づく分析',
+    ライター: '表現・ストーリー・読者の感情に寄り添う',
+    マネージャー: '実用性・優先順位・チーム全体の効率',
+    デザイナー: '表現・ビジュアル・ユーザー体験',
+    エンジニア: '技術的実現性・実装コスト・パフォーマンス',
+    アナリスト: 'データ解析・傾向分析・定量的評価',
+  };
+  return perspectives[role] || '独自の専門的な';
+}
+
+/**
+ * 会話フェーズごとの応答指示
+ */
+const PHASE_INSTRUCTIONS = {
+  greeting: `挨拶フェーズ
+- 軽い雑談で会話を始める
+- 相手への関心を示す質問をする
+- フレンドリーだが簡潔に`,
+  inquiry: `質問応答フェーズ
+- 相手の質問に直接答える
+- 自分の経験や知識から具体例を出す
+- 答えた上で逆に質問を返す（対話を深める）`,
+  discussion: `議論フェーズ
+- 相手の意見に自分なりの視点で反応する
+- 賛同だけでなく、時に建設的な反論をする
+- 新しい視点や切り口を提案する
+- 比喩やたとえ話で説明する`,
+  deep_dive: `深堀りフェーズ
+- より分析的で詳細な議論をする
+- 前提を疑う鋭い質問をする
+- 複数の角度から問題を検討する
+- 他のメンバーの過去の発言を引用して議論を発展させる`,
+};
+
 
 /**
  * エージェント固有の口調スタイル定義
@@ -317,3 +377,61 @@ export function getVoiceStyle(agentName, customStyle) {
   return AGENT_VOICE_STYLES[agentName] || DEFAULT_VOICE_STYLE;
 }
 
+/**
+ * ルールベースの感情分析（API call 不要）
+ * APIベースの analyzeSentiment の代替。レートリミッター占有を解消する。
+ * @param {string} text - 分析対象テキスト
+ * @returns {Array<{label: string, score: number}>} 感情スコアの配列
+ */
+export function analyzeSentimentLocal(text) {
+  if (!text || text.trim() === '') {
+    return [{ label: 'neutral', score: 0.5 }];
+  }
+
+  const positiveWords = [
+    '嬉しい', '楽しい', '面白い', '素晴らしい', 'すごい', 'いいね',
+    '好き', '最高', 'ありがとう', '感謝', 'わくわく', '期待',
+    'おめでとう', '幸せ', '良い', 'いい', '素敵', '美しい',
+    '笑', 'www', '！', '😊', '😄', '👍', '🎉',
+  ];
+  const negativeWords = [
+    '悲しい', '辛い', '嫌い', '困った', '問題', '残念',
+    'ダメ', '失敗', '怒り', '不安', '心配', 'ストレス',
+    '疲れ', 'しんどい', 'つまらない', '退屈', '無理', '最悪',
+    '泣', '😢', '😞', '😡',
+  ];
+
+  const posCount = positiveWords.filter((w) => text.includes(w)).length;
+  const negCount = negativeWords.filter((w) => text.includes(w)).length;
+
+  if (posCount > negCount) {
+    const intensity = Math.min(posCount / 3, 1);
+    return [{ label: posCount >= 3 ? 'very positive' : 'positive', score: 0.6 + intensity * 0.3 }];
+  }
+  if (negCount > posCount) {
+    const intensity = Math.min(negCount / 3, 1);
+    return [{ label: negCount >= 3 ? 'very negative' : 'negative', score: 0.4 - intensity * 0.3 }];
+  }
+  return [{ label: 'neutral', score: 0.5 }];
+}
+
+/**
+ * 会話フェーズを検出する（ルールベース）
+ * メッセージ数と直近の会話内容からフェーズを判定。
+ * @param {Array<{content: string}>} recentMemories - 直近の記憶
+ * @param {number} messageCount - セッション内のメッセージ数
+ * @returns {'greeting'|'inquiry'|'discussion'|'deep_dive'} 会話フェーズ
+ */
+export function detectConversationPhase(recentMemories, messageCount) {
+  if (messageCount <= 3) return 'greeting';
+
+  const recentText = recentMemories
+    .slice(0, 3)
+    .map((m) => m.content)
+    .join(' ');
+  if ((recentText.match(/[？?]/g) || []).length >= 2) return 'inquiry';
+
+  if (messageCount >= 10) return 'deep_dive';
+
+  return 'discussion';
+}

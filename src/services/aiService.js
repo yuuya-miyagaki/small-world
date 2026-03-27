@@ -136,6 +136,76 @@ export async function chat(messages, options = {}) {
 }
 
 /**
+ * ストリーミングでチャット応答を生成する（Gemini API）
+ * チャンクごとにコールバックを呼び出し、体感速度を改善する。
+ * @param {Array<{role: string, content: string}>} messages - メッセージ履歴
+ * @param {Object} [options] - 追加オプション
+ * @param {string} [options.model] - 使用するモデル
+ * @param {number} [options.maxTokens] - 最大トークン数
+ * @param {number} [options.temperature] - 温度パラメータ
+ * @param {Function} [options.onChunk] - チャンク受信コールバック (text: string) => void
+ * @returns {Promise<string>} 完全な応答テキスト
+ */
+export async function chatStream(messages, options = {}) {
+  const client = getGeminiClient();
+  const model = options.model || MODELS.CHAT;
+
+  // system メッセージを抽出してシステムインストラクションに変換
+  const systemMessages = messages.filter((m) => m.role === 'system');
+  const nonSystemMessages = messages.filter((m) => m.role !== 'system');
+
+  // Gemini API 用のコンテンツ形式に変換
+  const contents = nonSystemMessages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  // 連続する同一ロールのメッセージをマージ
+  const mergedContents = [];
+  for (const msg of contents) {
+    if (mergedContents.length > 0 && mergedContents[mergedContents.length - 1].role === msg.role) {
+      const last = mergedContents[mergedContents.length - 1];
+      last.parts.push({ text: msg.parts[0].text });
+    } else {
+      mergedContents.push({ ...msg });
+    }
+  }
+
+  const requestPayload = {
+    model,
+    contents: mergedContents,
+    config: {
+      systemInstruction: systemMessages.length > 0
+        ? systemMessages.map((m) => m.content).join('\n')
+        : undefined,
+      maxOutputTokens: options.maxTokens || 2048,
+      temperature: options.temperature ?? 0.7,
+    },
+  };
+
+  // レートリミッター適用（初回リクエスト時のみ待機）
+  const now = Date.now();
+  const elapsed = now - lastRequestTime;
+  if (elapsed < MIN_INTERVAL_MS) {
+    await sleep(MIN_INTERVAL_MS - elapsed);
+  }
+  lastRequestTime = Date.now();
+
+  const stream = await client.models.generateContentStream(requestPayload);
+
+  let fullText = '';
+  for await (const chunk of stream) {
+    const chunkText = chunk.text || '';
+    fullText += chunkText;
+    if (options.onChunk && chunkText) {
+      options.onChunk(chunkText);
+    }
+  }
+
+  return fullText;
+}
+
+/**
  * テキストの感情を分析する（Gemini で代替実装）
  * @param {string} text - 分析対象テキスト
  * @returns {Promise<Array<{label: string, score: number}>>} 感情スコアの配列

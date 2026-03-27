@@ -11,10 +11,10 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../config/firebase.js';
-import { chat, analyzeSentiment } from '../services/aiService.js';
-import { generateSystemPrompt } from './personality.js';
+import { chat, chatStream } from '../services/aiService.js';
+import { generateSystemPrompt, analyzeSentimentLocal, detectConversationPhase } from './personality.js';
 import { addShortTermMemory, getRecentMemories, recallMemories, checkConsolidationNeeded, consolidateMemories } from './memory.js';
-import { getAgent, updateMood, updateAgent } from './agent.js';
+import { getAgent, updateMood, updateAgent, listAgents } from './agent.js';
 import { updateBidirectionalRelationship, calculateInteractionDelta } from './relationship.js';
 import { recallRelevantEpisodes, buildMemoryContext, createEpisode } from './synapse.js';
 
@@ -144,9 +144,11 @@ export function subscribeToChannel(worldId, channelId, callback) {
  * @param {string} agentId - 応答するエージェントのID
  * @param {string} channelId - チャンネルID
  * @param {Object} incomingMessage - 受信メッセージ
+ * @param {Object} [options] - 追加オプション
+ * @param {Function} [options.onChunk] - ストリーミング時のチャンクコールバック
  * @returns {Promise<Object>} エージェントの応答メッセージ
  */
-export async function handleAgentResponse(worldId, agentId, channelId, incomingMessage) {
+export async function handleAgentResponse(worldId, agentId, channelId, incomingMessage, options = {}) {
   const agent = await getAgent(worldId, agentId);
   if (!agent) throw new Error(`Agent ${agentId} not found`);
 
@@ -158,25 +160,41 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     channelId,
   });
 
-  // 2. 関連する長期記憶を検索
-  const longTermMemories = await recallMemories(worldId, agentId, incomingMessage.content, 3);
-
-  // 2b. エピソード記憶を検索（Synapse）
+  // 2. 記憶検索を並列実行（短期記憶書き込み後に開始 → 整合性を保証）
+  let longTermMemories = [];
   let episodeContext = '';
+  let recentMemories = [];
+
   try {
-    const relevantEpisodes = await recallRelevantEpisodes(worldId, agentId, incomingMessage.content, 3);
-    episodeContext = buildMemoryContext(relevantEpisodes);
-  } catch {
-    // エピソード検索失敗は無視
+    const [ltm, episodes, recent] = await Promise.all([
+      recallMemories(worldId, agentId, incomingMessage.content, 3),
+      recallRelevantEpisodes(worldId, agentId, incomingMessage.content, 3).catch(() => []),
+      getRecentMemories(worldId, agentId, 5),
+    ]);
+    longTermMemories = ltm;
+    episodeContext = buildMemoryContext(episodes);
+    recentMemories = recent;
+  } catch (err) {
+    console.warn('[MessageBus] Memory retrieval partially failed:', err.message);
   }
 
-  // 3. 最近の短期記憶を取得（コンテキストとして）
-  const recentMemories = await getRecentMemories(worldId, agentId, 5);
+  // 3. 会話フェーズ検出（ルールベース）
+  const conversationPhase = detectConversationPhase(recentMemories, recentMemories.length);
 
-  // 4. システムプロンプト構築（エピソード記憶を注入）
+  // 3b. 他エージェント情報を取得（Firestore 1回読み取り）
+  let otherAgents = [];
+  try {
+    otherAgents = await listAgents(worldId);
+  } catch {
+    // 他エージェント情報取得失敗は無視
+  }
+
+  // 4. システムプロンプト構築（フェーズ + 他エージェント視点 + エピソード記憶を注入）
   const systemPrompt = generateSystemPrompt(agent, {
     memories: longTermMemories,
     relationships: agent.relationships || {},
+    conversationPhase,
+    otherAgents,
   }) + episodeContext;
 
   // 5. 会話履歴構築
@@ -196,16 +214,26 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
 
   let responseText;
   try {
-    responseText = await chat(messages, {
-      temperature: 0.6 + agent.personality.openness * 0.3,
-      maxTokens: 512,
-    });
+    if (options.onChunk) {
+      // ストリーミングモード: チャンクをUIにリアルタイム送信
+      responseText = await chatStream(messages, {
+        temperature: 0.6 + agent.personality.openness * 0.3,
+        maxTokens: 512,
+        onChunk: options.onChunk,
+      });
+    } else {
+      // 通常モード: 一括応答
+      responseText = await chat(messages, {
+        temperature: 0.6 + agent.personality.openness * 0.3,
+        maxTokens: 512,
+      });
+    }
   } catch (error) {
     console.error(`[MessageBus] Agent ${agent.name} response generation failed:`, error);
     responseText = generateFallbackResponse(agent);
   }
 
-  // 7. 応答をチャンネルに即座投稿（ユーザー体験優先）
+  // 7. 応答をチャンネルに投稿（ストリーミング完了後に一括書き込み）
   const responseMessage = await sendMessage(worldId, channelId, {
     content: responseText,
     senderId: agentId,
@@ -233,21 +261,16 @@ async function processPostResponse(worldId, agentId, channelId, agent, responseT
     channelId,
   });
 
-  // 感情分析 → 気分更新 + 関係性更新
-  let sentimentLabel = 'neutral';
-  try {
-    const sentimentResult = await analyzeSentiment(responseText);
-    const dominantSentiment = sentimentResult[0];
-    sentimentLabel = dominantSentiment?.label || 'neutral';
-    const sentimentScore = parseSentimentScore(dominantSentiment);
-    await updateMood(worldId, agentId, {
-      valence: agent.mood.valence * 0.7 + sentimentScore * 0.3,
-      energy: Math.max(0.1, agent.mood.energy - 0.02),
-      dominantEmotion: sentimentLabel,
-    });
-  } catch {
-    // 感情分析失敗時はスキップ
-  }
+  // 感情分析（ルールベース → API call 不要、キュー占有解消）
+  const sentimentResult = analyzeSentimentLocal(responseText);
+  const dominantSentiment = sentimentResult[0];
+  const sentimentLabel = dominantSentiment?.label || 'neutral';
+  const sentimentScore = parseSentimentScore(dominantSentiment);
+  await updateMood(worldId, agentId, {
+    valence: agent.mood.valence * 0.7 + sentimentScore * 0.3,
+    energy: Math.max(0.1, agent.mood.energy - 0.02),
+    dominantEmotion: sentimentLabel,
+  });
 
   // 関係性更新
   if (incomingMessage.senderId) {
