@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "date": "2026-03-27",
+  "window": "7d",
+  "project": "small-world",
+  "metrics": {
+    "commits": 9,
+    "contributors": 1,
+    "prMerged": 0,
+    "linesAdded": 11783,
+    "linesDeleted": 90,
+    "netLoc": 11693,
+    "testLines": 1773,
+    "productionLines": 3916,
+    "testRatio": 45.3,
+    "activeDays": 2,
+    "testFiles": 11,
+    "testsTotal": 102,
+    "testsPassed": 102,
+    "testsFailed": 0
+  },
+  "commitTypes": {
+    "feat": 7,
+    "perf+fix": 1,
+    "docs": 1
+  },
+  "hotspots": [
+    "src/ui/pages/dashboard.js (5 changes)",
+    "src/core/messageBus.js (5 changes)",
+    "src/styles/dashboard.css (4 changes)",
+    "tests/unit/messageBus.test.js (3 changes)"
+  ],
+  "sessions": [
+    {
+      "date": "2026-03-26",
+      "start": "10:48",
+      "end": "19:03",
+      "commits": 8,
+      "type": "deep"
+    },
+    {
+      "date": "2026-03-27",
+      "start": "09:48",
+      "end": "09:48",
+      "commits": 1,
+      "type": "micro"
+    }
+  ],
+  "keep": [
+    "独立モジュール設計: collective.js, pipeline.js, synapse.js が既存コードを汚染しない",
+    "TDD厳守: 102テスト ALL PASS（テスト比率45.3%）",
+    "API レート制限管理: ハートビート停止による衝突回避",
+    "Cross-AI セカンドオピニオン: Claude Codeの設計レビューで議論エンジン改善"
+  ],
+  "improve": [
+    "E2Eテスト不在: 102件全てユニットテスト、ブラウザ検証なし",
+    "本番未デプロイ: Phase 2 がローカルとGitHubのみ",
+    "エラーハンドリングの一貫性: try/catch の粒度がモジュール間で不統一",
+    "CSS肥大化: dashboard.css が884行に到達"
+  ],
+  "stop": [
+    "長時間連続セッション: 8時間超の深夜コーディングセッション",
+    "デプロイ前のバッチ実装: 3機能を一気に実装してからデプロイ"
+  ],
+  "architectureDecisions": [
+    {
+      "decision": "MessageBusを汚染しない独立モジュール設計",
+      "reason": "既存の1:1応答モデルに多対多の議論やパイプラインを混ぜると複雑化する",
+      "alternatives": "MessageBus拡張、イベントドリブン統合",
+      "tradeoff": "UIからの呼び出しが若干冗長になるがコード理解が容易"
+    },
+    {
+      "decision": "LLMベースのセマンティック検索 + キーワードフォールバック",
+      "reason": "日本語キーワードマッチでは十分な想起精度が得られない",
+      "alternatives": "ベクトルDB（Pinecone等）",
+      "tradeoff": "検索のたびにAPI呼出しが必要だがインフラ追加不要"
+    }
+  ],
+  "streak": {
+    "team": 2,
+    "personal": 2
+  }
+}
