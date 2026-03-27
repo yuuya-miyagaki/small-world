@@ -197,11 +197,11 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     otherAgents,
   }) + episodeContext;
 
-  // 5. 会話履歴構築
+  // 5. 会話履歴構築（記憶の content は「名前: 発言内容」形式で保存されている）
   const conversationHistory = recentMemories
     .reverse()
     .map((m) => ({
-      role: m.source === agentId ? 'assistant' : 'user',
+      role: m.content?.startsWith(`${agent.name}:`) ? 'model' : 'user',
       content: m.content,
     }));
 
@@ -230,7 +230,7 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     }
   } catch (error) {
     console.error(`[MessageBus] Agent ${agent.name} response generation failed:`, error);
-    responseText = generateFallbackResponse(agent);
+    responseText = generateFallbackResponse(agent, incomingMessage);
   }
 
   // 7. 応答をチャンネルに投稿（ストリーミング完了後に一括書き込み）
@@ -323,38 +323,134 @@ function parseSentimentScore(sentiment) {
 
 /**
  * API 失敗時のフォールバック応答を生成する
+ * ユーザーの質問内容を反映した文脈依存型応答
  * @param {Object} agent
+ * @param {Object} incomingMessage - 受信メッセージ（質問内容を反映するため）
  * @returns {string}
  */
-function generateFallbackResponse(agent) {
+function generateFallbackResponse(agent, incomingMessage) {
+  const userContent = incomingMessage?.content || '';
+  const senderName = incomingMessage?.senderName || '';
+
+  // 質問内容に基づく文脈依存型フォールバック
+  const contextual = generateContextualFallback(agent, userContent, senderName);
+  if (contextual) return contextual;
+
+  // 汎用フォールバック（文脈判定できない場合のみ）
   const fallbacks = {
     リサーチャー: [
-      'うーん、興味深い話題ですね。もう少し詳しく聞かせてください。',
-      'それについて調べてみる価値がありますね。',
-      '面白い視点です。データを集めてみましょうか？',
-      'なるほど、そのテーマは掘り下げがいがありそうです。',
-      '確かに、もう少し深く分析してみたいですね。',
+      `${senderName}さん、その話は気になりますね。データを集めてから改めて意見を出させてください。`,
+      `なるほど。一度しっかり調べてから、根拠のある回答をしたいですね。`,
     ],
     ライター: [
-      'なるほど、面白い視点ですね。まとめてみましょうか。',
-      '素敵な発想ですね。形にしてみたいです。',
-      'いい切り口ですね。ストーリーとして描けそうです。',
-      'そのアイデア、文章にすると映えそうですね。',
-      '表現を工夫して伝えてみたいテーマですね。',
+      `${senderName}さんのその視点、面白いですね。うまく言語化してみたいです。`,
+      `その話には色んな角度がありそうですね。どこから切り込みましょうか？`,
     ],
     マネージャー: [
-      '了解です。進め方を整理しましょう。',
-      'いいですね、まずは優先順位を決めましょう。',
-      'チームで取り組む価値がありますね。段取りを考えます。',
-      '目標を明確にして、タスクに分解してみましょう。',
-      'スケジュール感を確認しながら進めましょうか。',
+      `${senderName}さん、いい話題ですね。具体的にどう進めたいですか？`,
+      `そのテーマで何が一番重要かを一緒に整理しましょう。`,
+    ],
+    デザイナー: [
+      `${senderName}さん、興味深いですね。ユーザー目線だとどう見えるか考えてみたいです。`,
+      `その発想、ビジュアル的に表現するとどうなるか気になります。`,
     ],
   };
 
   const agentFallbacks = fallbacks[agent.role] || [
-    'なるほど、面白いですね。もう少し教えてください。',
+    `${senderName}さん、その点について自分なりの考えをまとめてみますね。`,
     'もう少し詳しく聞かせてもらえますか？',
     'それは興味深いですね。考えてみます。',
   ];
   return agentFallbacks[Math.floor(Math.random() * agentFallbacks.length)];
 }
+
+/**
+ * ユーザーの質問内容に基づく文脈依存型フォールバック応答
+ * @param {Object} agent
+ * @param {string} userContent - ユーザーの入力内容
+ * @param {string} senderName - 送信者名
+ * @returns {string|null} 文脈依存応答（判定できない場合はnull）
+ */
+function generateContextualFallback(agent, userContent, senderName) {
+  if (!userContent) return null;
+
+  const isQuestion = userContent.includes('？') || userContent.includes('?')
+    || userContent.includes('教えて') || userContent.includes('何')
+    || userContent.includes('どう') || userContent.includes('なぜ');
+
+  const isOpinionRequest = userContent.includes('意見') || userContent.includes('思い')
+    || userContent.includes('思う') || userContent.includes('考え');
+
+  const isTopicAbout = userContent.includes('について') || userContent.includes('に関して');
+
+  // 話題を抽出（「〜について」の前の名詞句を取る）
+  let topic = '';
+  const aboutMatch = userContent.match(/(.{2,15})(?:について|に関して|の(?:こと|話|トレンド))/);
+  if (aboutMatch) topic = aboutMatch[1];
+
+  // ロール別の応答バリエーション（テンプレートの単調さを防ぐ）
+  const roleResponses = {
+    リサーチャー: {
+      question: topic
+        ? `${senderName}さん、${topic}は気になるテーマですね。関連するデータや事例を探してみたいです。どの角度から掘り下げましょうか？`
+        : `${senderName}さん、その疑問は面白いですね。根拠になるデータを集めてみましょうか。`,
+      opinion: `${senderName}さん、研究者の視点で言うと、まず仮説を立てて検証するのが大事だと思います。先行事例を調べてみたいですね。`,
+      topic: topic
+        ? `${topic}に関しては、いくつかの切り口がありそうです。定量的なデータと定性的な分析、両方の視点で見てみたいですね。`
+        : null,
+    },
+    ライター: {
+      question: topic
+        ? `${senderName}さん、${topic}って言葉にするのが難しいテーマですよね。ストーリーとして組み立ててみると見えてくるものがありそうです。`
+        : `${senderName}さん、いい質問ですね。伝え方を工夫すれば、もっとクリアになりそうです。`,
+      opinion: `${senderName}さん、文章を書く人間としては、「誰に何を伝えたいか」を最初に決めるのが大切だと思いますね。`,
+      topic: topic
+        ? `${topic}を言葉にするなら、読み手の目線に立って構成を考えたいですね。どんな印象を残したいですか？`
+        : null,
+    },
+    マネージャー: {
+      question: topic
+        ? `${senderName}さん、${topic}については、まず優先度を整理しましょう。何が一番インパクトが大きいと思いますか？`
+        : `${senderName}さん、いい論点ですね。チームとして何から手をつけるか決めましょうか。`,
+      opinion: `${senderName}さん、マネジメントの観点だと、アクションに落とし込めるかが重要ですね。具体的な次のステップを一緒に考えましょう。`,
+      topic: topic
+        ? `${topic}は重要なテーマですね。タイムラインとリソースを考慮して、現実的なプランを立てましょうか。`
+        : null,
+    },
+    デザイナー: {
+      question: topic
+        ? `${senderName}さん、${topic}についてですか。ユーザーがどう感じるか、体験設計の観点で考えてみたいですね。`
+        : `${senderName}さん、その問いにはデザイン思考のアプローチが合いそうです。ユーザーの立場で考えてみましょう。`,
+      opinion: `${senderName}さん、デザイナーとしては、見た目だけじゃなくて使いやすさや感情面も大切にしたいですね。`,
+      topic: topic
+        ? `${topic}をデザインの目で見ると、色々な可能性がありますね。プロトタイプを作って試すのが一番早いかもしれません。`
+        : null,
+    },
+    エンジニア: {
+      question: topic
+        ? `${senderName}さん、${topic}について技術的に言えば、実装コストとメンテナンス性のバランスが鍵ですね。`
+        : `${senderName}さん、技術的にどう実現するかを考えてみましょう。パフォーマンスとスケーラビリティが重要ですね。`,
+      opinion: `${senderName}さん、エンジニアとしては、シンプルで壊れにくい設計を推したいですね。過度な複雑化は避けたいです。`,
+      topic: topic
+        ? `${topic}の技術的な実現方法はいくつかパターンがありますね。トレードオフを整理してみましょう。`
+        : null,
+    },
+  };
+
+  const responses = roleResponses[agent.role];
+
+  // ロール固有のテンプレートがない場合の汎用パターン
+  if (!responses) {
+    if (isQuestion && topic) return `${senderName}さん、${topic}は興味深いテーマですね。もう少し具体的に聞かせてください。`;
+    if (isOpinionRequest) return `${senderName}さん、自分の経験から言うと、多角的に検討することが大切だと思いますね。`;
+    if (isTopicAbout && topic) return `${topic}について考えてみると、色んな側面がありそうですね。`;
+    return null;
+  }
+
+  if (isQuestion) return responses.question;
+  if (isOpinionRequest) return responses.opinion;
+  if (isTopicAbout && responses.topic) return responses.topic;
+
+  return null; // 汎用フォールバックに委譲
+}
+

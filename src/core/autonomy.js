@@ -184,7 +184,7 @@ export async function executeAction(worldId, agentId, agent, decision, context) 
  * @param {number} [intervalMs=30000] - ハートビート間隔（ミリ秒）
  * @returns {string} ループID
  */
-export function startHeartbeatLoop(worldId, agentId, intervalMs = 30000) {
+export function startHeartbeatLoop(worldId, agentId, intervalMs = 300000) {
   const loopId = `${worldId}:${agentId}`;
 
   if (activeLoops.has(loopId)) {
