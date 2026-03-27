@@ -1,0 +1,108 @@
+{
+  "version": 2,
+  "date": "2026-03-27",
+  "phase": "3b",
+  "window": "7d",
+  "project": "small-world",
+  "metrics": {
+    "commits": 17,
+    "contributors": 1,
+    "prMerged": 0,
+    "linesAdded": 15456,
+    "linesDeleted": 964,
+    "netLoc": 14492,
+    "testLines": 2224,
+    "testRatio": 14.4,
+    "activeDays": 2,
+    "testFiles": 13,
+    "testsTotal": 146,
+    "testsPassed": 146,
+    "testsFailed": 0
+  },
+  "trendVsPrevious": {
+    "commits": { "prev": 9, "curr": 17, "change": "+89%" },
+    "testsTotal": { "prev": 102, "curr": 146, "change": "+43%" },
+    "linesAdded": { "prev": 11783, "curr": 15456, "change": "+31%" },
+    "linesDeleted": { "prev": 90, "curr": 964, "change": "+971%" },
+    "testRatio": { "prev": 45.3, "curr": 14.4, "change": "-31pp (CSS/UI大量追加のため)" },
+    "streak": { "prev": 2, "curr": 2, "change": "維持" }
+  },
+  "commitTypes": {
+    "feat": 11,
+    "docs": 3,
+    "fix": 1,
+    "perf": 2
+  },
+  "hotspots": [
+    "src/ui/pages/dashboard.js (9 changes)",
+    "src/styles/dashboard.css (5 changes)",
+    "src/core/messageBus.js (5 changes)",
+    "tests/unit/messageBus.test.js (3 changes)",
+    "src/core/personality.js (3 changes)"
+  ],
+  "sessions": [
+    {
+      "date": "2026-03-26",
+      "start": "10:48",
+      "end": "19:03",
+      "commits": 8,
+      "type": "deep"
+    },
+    {
+      "date": "2026-03-27",
+      "start": "09:48",
+      "end": "22:33",
+      "commits": 9,
+      "type": "deep"
+    }
+  ],
+  "keep": [
+    "Cross-AI レビュー: Claude Codeの3穴指摘（DOM同期/バリデーション冪等性/バンドルサイズ）が実装品質を大幅向上",
+    "TDD継続: 146テスト ALL PASS。新モジュール agentCreator.js に23テスト追加",
+    "バグの即修正サイクル: E2Eで isPreset バグ発見→修正→テスト追加の1サイクルを迅速に完了",
+    "CSS モジュール分割: 前回 IMPROVE の「CSS肥大化」を今回解決（884行→6ファイル分割）",
+    "動的 import: agentCreator.js を8.71KBの別チャンクに分離、初期ロード改善"
+  ],
+  "improve": [
+    "テスト比率の低下: 45.3%→14.4%。CSS/UIコード追加のため相対的に低下（テスト自体は+44件）",
+    "定数の複製: MAX_AGENTS が agentCreator.js と dashboard.js の2箇所に存在（動的importの代償）",
+    "confirm() ダイアログ: 削除確認にネイティブ confirm() を使用。カスタム UI に置き換えを検討",
+    "E2Eテスト自動化: ブラウザサブエージェントで手動検証は行ったが、自動化テストスイートは未整備"
+  ],
+  "stop": [
+    "テストデータの本番汚染: E2Eテスト中に本番Firestoreのプリセットエージェント(Mia)を削除してしまった"
+  ],
+  "architectureDecisions": [
+    {
+      "decision": "formState + applyStateToDOM パターンによる手動双方向バインディング",
+      "reason": "バニラJSにはReactのような自動バインディングがなく、明示的な同期が必要",
+      "alternatives": "Proxy-based reactivity, MutationObserver, lit-element",
+      "tradeoff": "コード量は増えるが、依存ゼロで理解しやすい"
+    },
+    {
+      "decision": "buildAgentData で isPreset: false 固定",
+      "reason": "プリセットはフォーム初期値の補助。ユーザー作成エージェントは常にカスタムで削除可能にすべき",
+      "alternatives": "isPreset: state.isPreset をそのまま渡す（元の実装）",
+      "tradeoff": "プリセットから作成しても編集・削除が可能になる"
+    },
+    {
+      "decision": "動的 import() によるコード分割",
+      "reason": "エージェント作成UIは全ユーザーが毎回使うわけではない。初期ロード改善",
+      "alternatives": "静的import（単一バンドル）",
+      "tradeoff": "MAX_AGENTS 定数の複製が発生。モーダル初回表示時にロード遅延あり"
+    }
+  ],
+  "previousImprovements": {
+    "resolved": [
+      "E2Eテスト不在 → ブラウザサブエージェントで手動E2E検証を開始",
+      "CSS肥大化 → 6ファイルにモジュール分割完了"
+    ],
+    "ongoing": [
+      "本番デプロイ → 未実施（次回 ultra-ship で対応）"
+    ]
+  },
+  "streak": {
+    "team": 2,
+    "personal": 2
+  }
+}
