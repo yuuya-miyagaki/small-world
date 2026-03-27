@@ -23,12 +23,13 @@ vi.mock('../../src/config/firebase.js', () => ({
 
 // AI サービスモック
 vi.mock('../../src/services/aiService.js', () => ({
+  chatWithModel: vi.fn(),
   chat: vi.fn(),
   analyzeSentiment: vi.fn(() => [{ label: 'positive', score: 0.7 }]),
   summarize: vi.fn(() => 'テストサマリー'),
 }));
 
-import { chat as mockChat } from '../../src/services/aiService.js';
+import { chatWithModel as mockChat } from '../../src/services/aiService.js';
 import { getDocs, getDoc, setDoc } from 'firebase/firestore';
 
 describe('MessageBus Module', () => {

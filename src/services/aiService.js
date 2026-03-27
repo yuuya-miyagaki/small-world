@@ -1,4 +1,37 @@
 import { getGeminiClient } from '../config/gemini.js';
+import { chat as hfChat, chatStream as hfChatStream } from './hfService.js';
+
+/**
+ * エージェントの preferredModel 設定に基づいて適切な AI バックエンドにルーティング
+ * @param {Array<{role: string, content: string}>} messages
+ * @param {Object} options - { provider, model, temperature, maxTokens, onChunk }
+ * @returns {Promise<string>}
+ */
+export async function chatWithModel(messages, options = {}) {
+  const provider = options.provider || 'gemini';
+
+  if (provider === 'huggingface') {
+    if (options.onChunk) {
+      return hfChatStream(messages, {
+        model: options.model,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
+        onChunk: options.onChunk,
+      });
+    }
+    return hfChat(messages, {
+      model: options.model,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    });
+  }
+
+  // デフォルト: Gemini
+  if (options.onChunk) {
+    return chatStream(messages, options);
+  }
+  return chat(messages, options);
+}
 
 // デフォルトモデル定数
 const MODELS = {

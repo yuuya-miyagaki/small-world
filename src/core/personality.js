@@ -289,6 +289,7 @@ export const PRESET_AGENTS = [
       agreeableness: 0.5,
       neuroticism: 0.4,
     },
+    preferredModel: { provider: 'gemini', model: 'gemini-2.5-flash' },
   },
   {
     name: 'Mia',
@@ -302,6 +303,7 @@ export const PRESET_AGENTS = [
       agreeableness: 0.9,
       neuroticism: 0.5,
     },
+    preferredModel: { provider: 'huggingface', model: 'Qwen/Qwen2.5-72B-Instruct' },
   },
   {
     name: 'Rex',
@@ -315,6 +317,7 @@ export const PRESET_AGENTS = [
       agreeableness: 0.4,
       neuroticism: 0.2,
     },
+    preferredModel: { provider: 'huggingface', model: 'google/gemma-2-27b-it' },
   },
 ];
 
@@ -334,6 +337,7 @@ export const EXTENDED_PRESETS = [
       agreeableness: 0.7,
       neuroticism: 0.5,
     },
+    preferredModel: { provider: 'huggingface', model: 'Qwen/Qwen2.5-72B-Instruct' },
   },
   {
     name: 'Echo',
@@ -347,6 +351,7 @@ export const EXTENDED_PRESETS = [
       agreeableness: 0.5,
       neuroticism: 0.3,
     },
+    preferredModel: { provider: 'huggingface', model: 'google/gemma-2-27b-it' },
   },
   {
     name: 'Ash',
@@ -360,6 +365,7 @@ export const EXTENDED_PRESETS = [
       agreeableness: 0.6,
       neuroticism: 0.4,
     },
+    preferredModel: { provider: 'huggingface', model: 'Qwen/Qwen2.5-72B-Instruct' },
   },
 ];
 

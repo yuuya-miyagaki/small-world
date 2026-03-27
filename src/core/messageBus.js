@@ -11,7 +11,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '../config/firebase.js';
-import { chat, chatStream } from '../services/aiService.js';
+import { chatWithModel } from '../services/aiService.js';
 import { generateSystemPrompt, analyzeSentimentLocal, detectConversationPhase } from './personality.js';
 import { addShortTermMemory, getRecentMemories, recallMemories, checkConsolidationNeeded, consolidateMemories } from './memory.js';
 import { getAgent, updateMood, updateAgent, listAgents } from './agent.js';
@@ -205,29 +205,24 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
       content: m.content,
     }));
 
-  // 6. Gemini API で応答生成
+  // 6. AI モデルで応答生成（エージェントの preferredModel に基づきルーティング）
   const messages = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory,
     { role: 'user', content: `${incomingMessage.senderName}: ${incomingMessage.content}` },
   ];
 
+  const modelConfig = agent.preferredModel || { provider: 'gemini' };
+
   let responseText;
   try {
-    if (options.onChunk) {
-      // ストリーミングモード: チャンクをUIにリアルタイム送信
-      responseText = await chatStream(messages, {
-        temperature: 0.6 + agent.personality.openness * 0.3,
-        maxTokens: 512,
-        onChunk: options.onChunk,
-      });
-    } else {
-      // 通常モード: 一括応答
-      responseText = await chat(messages, {
-        temperature: 0.6 + agent.personality.openness * 0.3,
-        maxTokens: 512,
-      });
-    }
+    responseText = await chatWithModel(messages, {
+      provider: modelConfig.provider,
+      model: modelConfig.model,
+      temperature: 0.6 + agent.personality.openness * 0.3,
+      maxTokens: 512,
+      onChunk: options.onChunk || undefined,
+    });
   } catch (error) {
     console.error(`[MessageBus] Agent ${agent.name} response generation failed:`, error);
     responseText = generateFallbackResponse(agent, incomingMessage);

@@ -3,15 +3,17 @@ import './styles/pages.css';
 import './styles/dashboard.css';
 import { initFirebase } from './config/firebase.js';
 import { initGeminiClient } from './config/gemini.js';
+import { initHfClient } from './config/hf.js';
 import { onAuthStateChanged } from './services/authService.js';
 import { addRoute, initRouter, navigate, getCurrentPath } from './ui/router.js';
 import { renderLogin } from './ui/pages/login.js';
 import { renderWorlds } from './ui/pages/worlds.js';
 import { renderDashboard } from './ui/pages/dashboard.js';
 
-// Firebase & Gemini 初期化
+// Firebase & AI クライアント初期化
 initFirebase();
 initGeminiClient();
+initHfClient();
 
 // 認証状態
 let currentUser = null;

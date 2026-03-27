@@ -1,7 +1,7 @@
 import { getAgent, listAgents, updateAgent, updateMood } from './agent.js';
 import { getRecentMemories } from './memory.js';
 import { listChannels, sendMessage, handleAgentResponse } from './messageBus.js';
-import { chat } from '../services/aiService.js';
+import { chatWithModel } from '../services/aiService.js';
 import { generateSystemPrompt } from './personality.js';
 
 /** アクティブなハートビートループの管理 */
@@ -89,10 +89,13 @@ async function decide(agent, context) {
 JSON形式で回答してください:`;
 
   try {
-    const response = await chat([
+    const modelConfig = agent.preferredModel || { provider: 'gemini' };
+    const response = await chatWithModel([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: decisionPrompt },
     ], {
+      provider: modelConfig.provider,
+      model: modelConfig.model,
       temperature: 0.5,
       maxTokens: 100,
     });
@@ -124,10 +127,13 @@ export async function executeAction(worldId, agentId, agent, decision, context) 
       let messageContent;
 
       try {
-        messageContent = await chat([
+        const modelCfg = agent.preferredModel || { provider: 'gemini' };
+        messageContent = await chatWithModel([
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `以下の話題について、あなたらしく1-2文でコメントしてください: ${decision.topic || '何か面白いこと'}` },
         ], {
+          provider: modelCfg.provider,
+          model: modelCfg.model,
           temperature: 0.7,
           maxTokens: 128,
         });
