@@ -16,6 +16,7 @@ import { generateSystemPrompt } from './personality.js';
 import { addShortTermMemory, getRecentMemories, recallMemories, checkConsolidationNeeded, consolidateMemories } from './memory.js';
 import { getAgent, updateMood, updateAgent } from './agent.js';
 import { updateBidirectionalRelationship, calculateInteractionDelta } from './relationship.js';
+import { recallRelevantEpisodes, buildMemoryContext, createEpisode } from './synapse.js';
 
 /**
  * チャンネルを作成する
@@ -160,14 +161,23 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
   // 2. 関連する長期記憶を検索
   const longTermMemories = await recallMemories(worldId, agentId, incomingMessage.content, 3);
 
+  // 2b. エピソード記憶を検索（Synapse）
+  let episodeContext = '';
+  try {
+    const relevantEpisodes = await recallRelevantEpisodes(worldId, agentId, incomingMessage.content, 3);
+    episodeContext = buildMemoryContext(relevantEpisodes);
+  } catch {
+    // エピソード検索失敗は無視
+  }
+
   // 3. 最近の短期記憶を取得（コンテキストとして）
   const recentMemories = await getRecentMemories(worldId, agentId, 5);
 
-  // 4. システムプロンプト構築
+  // 4. システムプロンプト構築（エピソード記憶を注入）
   const systemPrompt = generateSystemPrompt(agent, {
     memories: longTermMemories,
     relationships: agent.relationships || {},
-  });
+  }) + episodeContext;
 
   // 5. 会話履歴構築
   const conversationHistory = recentMemories
@@ -256,6 +266,19 @@ async function processPostResponse(worldId, agentId, channelId, agent, responseT
     consolidateMemories(worldId, agentId).catch((err) =>
       console.warn(`[Memory] Consolidation failed: ${err.message}`)
     );
+  }
+
+  // エピソード記憶を作成（Synapse）
+  try {
+    await createEpisode(worldId, agentId, {
+      participants: [agentId, incomingMessage.senderId].filter(Boolean),
+      topic: incomingMessage.content.slice(0, 50),
+      content: `${incomingMessage.senderName}: ${incomingMessage.content} → ${agent.name}: ${responseText.slice(0, 100)}`,
+      emotionalTone: sentimentLabel,
+      channelId,
+    });
+  } catch {
+    // エピソード作成失敗はスキップ
   }
 }
 
