@@ -1,4 +1,4 @@
-import { listAgents, getAgent } from '../../core/agent.js';
+import { listAgents, getAgent, createAgent } from '../../core/agent.js';
 import { listChannels, subscribeToChannel, sendMessage, handleAgentResponse } from '../../core/messageBus.js';
 import { startHeartbeatLoop, stopAllHeartbeats } from '../../core/autonomy.js';
 import { startDiscussion, generateReport } from '../../core/collective.js';
@@ -8,6 +8,7 @@ import { signOut } from '../../services/authService.js';
 import { navigate } from '../router.js';
 import { onSnapshot, collection } from 'firebase/firestore';
 import { getFirebaseDb } from '../../config/firebase.js';
+import { renderAgentCreatorModal, MAX_AGENTS } from '../components/agentCreator.js';
 
 /** @type {Function|null} */
 let unsubscribeMessages = null;
@@ -94,6 +95,12 @@ function renderDashboardUI(state) {
           <div id="agentList">
             ${renderAgentList(state)}
           </div>
+          ${state.agents.length < MAX_AGENTS ? `
+            <button class="agent-add-btn" id="addAgentBtn" type="button">
+              <span class="add-icon">➕</span>
+              <span>エージェントを追加</span>
+            </button>
+          ` : ''}
         </div>
         <div class="sidebar-section">
           <div class="sidebar-title">チャンネル</div>
@@ -513,6 +520,9 @@ function bindDashboardEvents(state) {
 
   // Pipeline engine
   bindPipelineEvents(state);
+
+  // Agent Creator
+  bindAddAgentButton(state);
 }
 
 function setupRealtimeListeners(state) {
@@ -547,6 +557,9 @@ function setupRealtimeListeners(state) {
           });
         });
       }
+
+      // Re-bind add agent button
+      bindAddAgentButton(state);
 
       // Update detail panel if selected agent changed
       if (state.selectedAgent) {
@@ -845,3 +858,78 @@ function renderPipelineResult(result) {
   `;
 }
 
+
+// ============================================================
+// Agent Creator 統合
+// ============================================================
+
+/**
+ * ➕ エージェント追加ボタンのバインド
+ * onSnapshot の再レンダリング後にも呼ばれるため、冪等に設計。
+ *
+ * @param {Object} state - ダッシュボード状態
+ */
+function bindAddAgentButton(state) {
+  const addBtn = document.getElementById('addAgentBtn');
+  if (!addBtn) return;
+
+  addBtn.addEventListener('click', () => {
+    // 上限チェック
+    if (state.agents.length >= MAX_AGENTS) {
+      showToast('エージェントは最大' + MAX_AGENTS + '体までです', 'error');
+      return;
+    }
+
+    renderAgentCreatorModal({
+      currentAgentCount: state.agents.length,
+      onSubmit: async (agentData) => {
+        try {
+          const newAgent = await createAgent(state.worldId, agentData);
+          console.log('[AgentCreator] Created:', newAgent.name);
+
+          // ハートビート開始（新規エージェント）
+          const interval = state.world.settings?.heartbeatInterval || 30000;
+          startHeartbeatLoop(state.worldId, newAgent.id, interval);
+
+          // トースト通知
+          showToast('🎉 ' + newAgent.name + ' を作成しました！', 'success');
+
+          // onSnapshot が自動的にサイドバーを再レンダリングする
+        } catch (error) {
+          console.error('[AgentCreator] Failed:', error);
+          showToast('作成に失敗しました: ' + error.message, 'error');
+          throw error; // モーダル側のエラー表示用に再throw
+        }
+      },
+      onCancel: () => {
+        console.log('[AgentCreator] Cancelled');
+      },
+    });
+  });
+}
+
+/**
+ * トースト通知を表示する
+ * @param {string} message - メッセージ
+ * @param {'success'|'error'|'info'} type - トーストタイプ
+ */
+function showToast(message, type) {
+  type = type || 'info';
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}

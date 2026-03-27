@@ -9,6 +9,7 @@
 @import './chat.css';
 @import './detail.css';
 @import './modal.css';
+@import './agent-creator.css';
 
 /* --- Reset --- */
 *, *::before, *::after {
