@@ -149,6 +149,7 @@ export function subscribeToChannel(worldId, channelId, callback) {
  * @returns {Promise<Object>} エージェントの応答メッセージ
  */
 export async function handleAgentResponse(worldId, agentId, channelId, incomingMessage, options = {}) {
+  const { onChunk, priorAgentResponses = [] } = options;
   const agent = await getAgent(worldId, agentId);
   if (!agent) throw new Error(`Agent ${agentId} not found`);
 
@@ -189,40 +190,117 @@ export async function handleAgentResponse(worldId, agentId, channelId, incomingM
     // 他エージェント情報取得失敗は無視
   }
 
-  // 4. システムプロンプト構築（フェーズ + 他エージェント視点 + エピソード記憶を注入）
+  // 4. システムプロンプト構築（フェーズ + 他エージェント視点 + 先行発言 + エピソード記憶を注入）
   const systemPrompt = generateSystemPrompt(agent, {
     memories: longTermMemories,
     relationships: agent.relationships || {},
     conversationPhase,
     otherAgents,
+    priorAgentResponses,        // ← 先行エージェント発言をコンテキスト化
   }) + episodeContext;
 
-  // 5. 会話履歴構築（記憶の content は「名前: 発言内容」形式で保存されている）
-  const conversationHistory = recentMemories
-    .reverse()
-    .map((m) => ({
-      role: m.content?.startsWith(`${agent.name}:`) ? 'model' : 'user',
-      content: m.content,
-    }));
+  // 5. 会話履歴構築
+  // - 自分の発言 → 'model'（assistant）
+  // - それ以外 → 'user'
+  // - incomingMessage と重複する記憶を除外
+  // - 連続する同一ロールを交互化（Gemini/HF 両対応）
+  const incomingText = `${incomingMessage.senderName}: ${incomingMessage.content}`;
+  const filteredMemories = recentMemories
+    .filter((m) => m.content !== incomingText)  // incomingMessage の重複を除外
+    .reverse();
+
+  const rawHistory = filteredMemories.map((m) => ({
+    role: m.content?.startsWith(`${agent.name}:`) ? 'model' : 'user',
+    content: m.content,
+  }));
+
+  // 連続する同一ロールを交互化（Gemini API は同一ロール連続をマージしてしまう）
+  const conversationHistory = [];
+  for (const msg of rawHistory) {
+    if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === msg.role) {
+      // 同一ロールが連続 → 前のメッセージに結合（改行区切り）
+      conversationHistory[conversationHistory.length - 1].content += '\n' + msg.content;
+    } else {
+      conversationHistory.push({ ...msg });
+    }
+  }
+
+  // 末尾が user なら incomingMessage を結合、そうでなければ新規追加
+  const userMsg = { role: 'user', content: `${incomingMessage.senderName}: ${incomingMessage.content}` };
+  if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+    conversationHistory[conversationHistory.length - 1].content += '\n' + userMsg.content;
+  } else {
+    conversationHistory.push(userMsg);
+  }
 
   // 6. AI モデルで応答生成（エージェントの preferredModel に基づきルーティング）
   const messages = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory,
-    { role: 'user', content: `${incomingMessage.senderName}: ${incomingMessage.content}` },
   ];
 
   const modelConfig = agent.preferredModel || { provider: 'gemini' };
+
+  // ========== デバッグ: LLMに送られる内容を可視化 ==========
+  console.group(`[DEBUG] ${agent.name} (${modelConfig.provider}/${modelConfig.model})`);
+  console.log('System prompt length:', systemPrompt.length, 'chars');
+  console.log('System prompt (first 500 chars):', systemPrompt.slice(0, 500));
+  console.log('Messages array:');
+  messages.forEach((m, i) => {
+    if (m.role === 'system') {
+      console.log(`  [${i}] role=${m.role} (${m.content.length} chars)`);
+    } else {
+      console.log(`  [${i}] role=${m.role}: ${m.content.slice(0, 150)}`);
+    }
+  });
+  console.groupEnd();
+  // ========================================================
+
+  // ロール別 maxTokens（マネージャーは簡潔に、リサーチャーは詳しく）
+  const roleMaxTokens = {
+    'マネージャー': 150,
+    'ライター': 250,
+    'リサーチャー': 300,
+  };
+  const maxTokens = roleMaxTokens[agent.role] || 200;
+
+  // ロール別 temperature（同じモデルでも個性を出す）
+  const roleTemperature = {
+    'マネージャー': 0.6,  // 直球・実務的
+    'ライター': 0.8,      // 創造的・表現豊か
+    'リサーチャー': 0.5,  // 正確・分析的
+  };
+  const temperature = roleTemperature[agent.role] || 0.7;
 
   let responseText;
   try {
     responseText = await chatWithModel(messages, {
       provider: modelConfig.provider,
       model: modelConfig.model,
-      temperature: 0.6 + agent.personality.openness * 0.3,
-      maxTokens: 512,
-      onChunk: options.onChunk || undefined,
+      temperature,
+      maxTokens,
+      onChunk: onChunk || undefined,
     });
+
+    // ========== デバッグ: LLMからの返答 ==========
+    console.log(`[DEBUG] ${agent.name} response (${responseText.length} chars):`, responseText.slice(0, 300));
+    // =============================================
+
+    // 名前プレフィックス除去（LLMが「Rex: 」「Mia: 」を付けて応答する場合のクリーンアップ）
+    const namePrefix = new RegExp(`^\\s*${agent.name}\\s*[:：]\\s*`, 'i');
+    responseText = responseText.replace(namePrefix, '').trim();
+
+    // 空振り検出 → 温度を上げて1回再試行
+    if (isEmptyResponse(responseText, incomingMessage.content)) {
+      console.warn(`[MessageBus] Empty response detected for ${agent.name}, retrying...`);
+      responseText = await chatWithModel(messages, {
+        provider: modelConfig.provider,
+        model: modelConfig.model,
+        temperature: Math.min(temperature + 0.15, 0.95),
+        maxTokens,
+      });
+      responseText = responseText.replace(namePrefix, '').trim();
+    }
   } catch (error) {
     console.error(`[MessageBus] Agent ${agent.name} response generation failed:`, error);
     responseText = generateFallbackResponse(agent, incomingMessage);
@@ -449,3 +527,28 @@ function generateContextualFallback(agent, userContent, senderName) {
   return null; // 汎用フォールバックに委譲
 }
 
+/**
+ * 空振り応答を検出する（追加API call なし）
+ * 肯定語だけで終わっている、短すぎる、話題が完全にずれている場合を検出
+ * @param {string} responseText - エージェントの応答
+ * @param {string} incomingContent - ユーザーの元の質問
+ * @returns {boolean} true = 再生成が必要
+ */
+function isEmptyResponse(responseText, incomingContent) {
+  if (!responseText || !incomingContent) return false;
+
+  // パターン1: 肯定語+一般論で始まっている（具体的内容なし）
+  const emptyOpeners = ['いい論点', 'いい質問', 'なるほど', 'その通り', 'おっしゃる通り', '確かに', '素晴らしい'];
+  const startsWithEmpty = emptyOpeners.some(p => responseText.startsWith(p) || responseText.startsWith(`、${p}`));
+
+  // パターン2: 短すぎる（句読点・空白を除いた実質文字数が25未満）
+  const isTooShort = responseText.replace(/[。、！？\s]/g, '').length < 25;
+
+  // パターン3: 完全に話題を変えている（元の質問のキーワードが1つも含まれない）
+  const incomingWords = incomingContent
+    .replace(/[、。！？\s]/g, ' ').split(' ')
+    .filter(w => w.length > 1);
+  const hasTopicMatch = incomingWords.length === 0 || incomingWords.some(w => responseText.includes(w));
+
+  return (startsWithEmpty && isTooShort) || (!hasTopicMatch && isTooShort);
+}

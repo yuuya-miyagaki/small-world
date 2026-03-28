@@ -80,8 +80,8 @@ function renderDashboardUI(state) {
         </div>
         <div class="header-right">
           <div class="header-status">
-            <span class="status-dot"></span>
-            <span>ハートビート稼働中</span>
+            <span class="status-dot" style="background: #22c55e;"></span>
+            <span>チャットモード</span>
           </div>
           <button class="btn btn-ghost" id="backToWorlds">ワールド一覧</button>
           <button class="btn btn-ghost" id="logoutBtn">ログアウト</button>
@@ -469,13 +469,15 @@ function bindDashboardEvents(state) {
         senderType: 'user',
       });
 
-      // Get agent responses — 会話チェーン方式 + ストリーミング表示
-      let lastMessage = {
+      // Get agent responses — 全エージェントが元のユーザーメッセージに応答
+      // 先行エージェントの発言はコンテキストとして渡す（繰り返し防止）
+      const originalUserMessage = {
         content,
         senderId: state.user.uid,
         senderName: state.user.email?.split('@')[0] || 'User',
         senderType: 'user',
       };
+      const priorAgentResponses = [];
 
       for (const agent of state.agents) {
         // 仮メッセージをDOMに挿入（ストリーミング用）
@@ -491,25 +493,24 @@ function bindDashboardEvents(state) {
             state.worldId,
             agent.id,
             state.selectedChannel.id,
-            lastMessage,
+            originalUserMessage,          // ← 常に元のユーザーメッセージ
             {
               onChunk: (chunkText) => {
                 // ストリーミング中: 仮メッセージのテキストを逐次更新
                 updateStreamingMessage(streamId, chunkText);
               },
+              priorAgentResponses,        // ← 先行エージェントの発言をコンテキストとして渡す
             }
           );
 
           // ストリーミング完了 → 仮メッセージを除去（onSnapshotが正式版を挿入するため）
           removeStreamingPlaceholder(streamId);
 
-          // 次のエージェントは、このエージェントの応答に対して返答する
-          lastMessage = {
+          // 先行発言リストに追加（次のエージェントのコンテキストに使う）
+          priorAgentResponses.push({
+            agentName: agent.name,
             content: response.content,
-            senderId: agent.id,
-            senderName: agent.name,
-            senderType: 'agent',
-          };
+          });
         } catch (error) {
           console.error(`[Chat] Agent ${agent.name} response failed:`, error);
           removeStreamingPlaceholder(streamId);
@@ -614,10 +615,8 @@ function subscribeToMessages(state) {
 }
 
 function setupHeartbeats(state) {
-  const interval = state.world.settings?.heartbeatInterval || 30000;
-  for (const agent of state.agents) {
-    startHeartbeatLoop(state.worldId, agent.id, interval);
-  }
+  // 自律発言を無効化（ユーザー応答の品質改善に集中するため）
+  console.log('[Autonomy] Heartbeat disabled — manual chat only');
 }
 
 function showTyping(name) {

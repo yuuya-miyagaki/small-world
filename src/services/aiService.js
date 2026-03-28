@@ -10,23 +10,27 @@ import { chat as hfChat, chatStream as hfChatStream } from './hfService.js';
 export async function chatWithModel(messages, options = {}) {
   const provider = options.provider || 'gemini';
 
-  if (provider === 'huggingface') {
+  // --- Gemini API が 429 (limit:0) のため、一時的に全プロバイダをHFにフォールバック ---
+  // Gemini APIキーが復活したらこのブロックを削除すれば元に戻る
+  const useHf = true; // ← false にすれば Gemini に戻る
+  if (useHf || provider === 'huggingface') {
+    const hfModel = options.model || 'Qwen/Qwen2.5-72B-Instruct';
     if (options.onChunk) {
       return hfChatStream(messages, {
-        model: options.model,
+        model: hfModel,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
         onChunk: options.onChunk,
       });
     }
     return hfChat(messages, {
-      model: options.model,
+      model: hfModel,
       temperature: options.temperature,
       maxTokens: options.maxTokens,
     });
   }
 
-  // デフォルト: Gemini
+  // デフォルト: Gemini（現在到達しない）
   if (options.onChunk) {
     return chatStream(messages, options);
   }
@@ -35,7 +39,7 @@ export async function chatWithModel(messages, options = {}) {
 
 // デフォルトモデル定数
 const MODELS = {
-  CHAT: 'gemini-2.5-flash',
+  CHAT: 'gemini-2.0-flash',
 };
 
 // --- レートリミッター ---
