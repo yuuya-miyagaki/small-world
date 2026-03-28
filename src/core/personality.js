@@ -382,7 +382,7 @@ export const EXTENDED_PRESETS = [
       agreeableness: 0.5,
       neuroticism: 0.3,
     },
-    preferredModel: { provider: 'huggingface', model: 'google/gemma-2-27b-it' },
+    preferredModel: { provider: 'huggingface', model: 'meta-llama/Llama-3.3-70B-Instruct' },
   },
   {
     name: 'Ash',
