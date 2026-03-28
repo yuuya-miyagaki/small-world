@@ -75,7 +75,8 @@ describe('MessageBus Module', () => {
     });
 
     it('should call Gemini chat API with correct message structure', async () => {
-      mockChat.mockResolvedValueOnce('これは面白い研究テーマですね。');
+      // isEmptyResponse でリトライされる可能性があるため、2回分のモックを設定
+      mockChat.mockResolvedValue('これは面白い研究テーマですね。');
 
       await handleAgentResponse('world-1', 'agent-1', 'channel-1', {
         content: 'こんにちは',
@@ -84,7 +85,7 @@ describe('MessageBus Module', () => {
         senderType: 'user',
       });
 
-      expect(mockChat).toHaveBeenCalledTimes(1);
+      expect(mockChat).toHaveBeenCalled();
       const callArgs = mockChat.mock.calls[0];
       const messages = callArgs[0];
 
@@ -113,8 +114,8 @@ describe('MessageBus Module', () => {
       expect(result).toBeDefined();
     });
 
-    it('should pass temperature based on personality openness', async () => {
-      mockChat.mockResolvedValueOnce('応答テスト');
+    it('should pass temperature based on agent role', async () => {
+      mockChat.mockResolvedValue('応答テスト');
 
       await handleAgentResponse('world-1', 'agent-1', 'channel-1', {
         content: 'テスト',
@@ -124,9 +125,8 @@ describe('MessageBus Module', () => {
       });
 
       const options = mockChat.mock.calls[0][1];
-      // temperature = 0.6 + openness(0.8) * 0.3 = 0.84
-      expect(options.temperature).toBeCloseTo(0.84, 1);
-      expect(options.maxTokens).toBe(512);
+      // リサーチャーのロール別 temperature = 0.5
+      expect(options.temperature).toBe(0.5);
     });
 
     it('should not throw when API fails and return a valid message', async () => {

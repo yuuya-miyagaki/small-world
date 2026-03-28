@@ -10,6 +10,7 @@
 @import './detail.css';
 @import './modal.css';
 @import './agent-creator.css';
+@import './taskboard.css';
 
 /* --- Reset --- */
 *, *::before, *::after {

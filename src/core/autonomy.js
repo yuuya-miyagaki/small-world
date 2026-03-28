@@ -3,6 +3,7 @@ import { getRecentMemories } from './memory.js';
 import { listChannels, sendMessage, handleAgentResponse } from './messageBus.js';
 import { chatWithModel } from '../services/aiService.js';
 import { generateSystemPrompt } from './personality.js';
+import { listTasks, executeTask } from './taskManager.js';
 
 /** アクティブなハートビートループの管理 */
 const activeLoops = new Map();
@@ -43,16 +44,28 @@ export async function heartbeat(worldId, agentId) {
  * @returns {Promise<Object>}
  */
 export async function collectContext(worldId, agentId) {
-  const [agents, channels, recentMemories] = await Promise.all([
+  const [agents, channels, recentMemories, allTasks] = await Promise.all([
     listAgents(worldId),
     listChannels(worldId),
     getRecentMemories(worldId, agentId, 5),
+    listTasks(worldId).catch(() => []),
   ]);
+
+  // このエージェントにアサインされた未完了タスク
+  const myPendingTasks = allTasks.filter(
+    (t) => t.assigneeId === agentId && ['pending', 'in_progress'].includes(t.status),
+  );
+  // 未アサインの pending タスク
+  const unassignedTasks = allTasks.filter(
+    (t) => !t.assigneeId && t.status === 'pending',
+  );
 
   return {
     otherAgents: agents.filter((a) => a.id !== agentId),
     channels,
     recentMemories,
+    myPendingTasks,
+    unassignedTasks,
     timestamp: new Date().toISOString(),
   };
 }
@@ -68,16 +81,21 @@ async function decide(agent, context) {
 
   const contextSummary = buildContextSummary(agent, context);
 
-  const decisionPrompt = `${contextSummary}
+  // タスク情報をプロンプトに追加
+  const taskSummary = buildTaskSummary(context);
 
+  const decisionPrompt = `${contextSummary}
+${taskSummary}
 以下のアクションから1つだけ選んでください。JSON形式で回答してください:
 
 選択肢:
-1. {"action": "message", "target": "チャンネルID", "topic": "話題"}
+1. {"action": "task", "target": "タスクID", "topic": "タスクの作業内容"}
+   → アサインされたタスクを実行する（最優先）
+2. {"action": "message", "target": "チャンネルID", "topic": "話題"}
    → チャンネルにメッセージを投稿する
-2. {"action": "react", "target": "エージェントID", "topic": "反応内容"}
+3. {"action": "react", "target": "エージェントID", "topic": "反応内容"}
    → 他のエージェントの最近の発言に反応する
-3. {"action": "idle", "target": null, "topic": null}
+4. {"action": "idle", "target": null, "topic": null}
    → 何もしない（エネルギーが低い時、話題がない時）
 
 判断基準:
@@ -85,6 +103,7 @@ async function decide(agent, context) {
 - ストレスが${agent.mood.stress > 0.6 ? '高い' : '低い'}
 - あなたの性格に基づいて自然な行動を選んでください
 - 外向性が${agent.personality.extraversion > 0.6 ? '高い' : '低い'}ので、${agent.personality.extraversion > 0.6 ? '積極的に交流する傾向がある' : '静かに過ごす傾向がある'}
+- アサインされたタスクがある場合は、タスク実行を最優先してください
 
 JSON形式で回答してください:`;
 
@@ -103,7 +122,7 @@ JSON形式で回答してください:`;
     return parseDecision(response, context);
   } catch (error) {
     console.warn(`[Autonomy] Decision failed for ${agent.name}:`, error.message);
-    return makeFallbackDecision(agent, context);
+    return makeFallbackDecision(agent, context, agentId);
   }
 }
 
@@ -118,6 +137,39 @@ JSON形式で回答してください:`;
  */
 export async function executeAction(worldId, agentId, agent, decision, context) {
   switch (decision.action) {
+    case 'task': {
+      // タスクを自律的に実行
+      const taskId = decision.target;
+      if (!taskId) {
+        // target が無い場合、ペンディングタスクから最初のものを使用
+        const fallbackTask = context.myPendingTasks?.[0] || context.unassignedTasks?.[0];
+        if (!fallbackTask) return { action: 'skip', detail: 'No pending tasks' };
+        decision.target = fallbackTask.id;
+      }
+
+      try {
+        const channelId = context.channels[0]?.id || null;
+        const result = await executeTask(worldId, decision.target, { channelId });
+
+        // 統計更新
+        await updateAgent(worldId, agentId, {
+          'stats.autonomousActions': (agent.stats?.autonomousActions || 0) + 1,
+          'stats.tasksCompleted': (agent.stats?.tasksCompleted || 0) + 1,
+          status: 'active',
+        });
+
+        return {
+          action: 'task',
+          detail: `Task executed by ${result.agentName}: ${result.content?.slice(0, 80)}...`,
+          taskId: decision.target,
+          status: result.status,
+        };
+      } catch (error) {
+        console.error(`[Autonomy] Task execution failed for ${agent.name}:`, error.message);
+        return { action: 'task_failed', detail: error.message, taskId: decision.target };
+      }
+    }
+
     case 'message': {
       const channelId = decision.target || context.channels[0]?.id;
       if (!channelId) return { action: 'skip', detail: 'No channel available' };
@@ -268,13 +320,34 @@ ${memoryList || '(なし)'}
 `;
 }
 
+function buildTaskSummary(context) {
+  const myTasks = (context.myPendingTasks || [])
+    .map((t) => `- [${t.id}] "${t.title}" (${t.status === 'pending' ? '未着手' : '進行中'})`)
+    .join('\n');
+
+  const unassigned = (context.unassignedTasks || [])
+    .slice(0, 3)
+    .map((t) => `- [${t.id}] "${t.title}"`)
+    .join('\n');
+
+  if (!myTasks && !unassigned) return '';
+
+  return `
+【あなたのタスク】
+${myTasks || '(なし)'}
+
+【未アサインのタスク】
+${unassigned || '(なし)'}
+`;
+}
+
 function parseDecision(response, context) {
   try {
     // JSON部分を抽出
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      if (['message', 'react', 'idle'].includes(parsed.action)) {
+      if (['task', 'message', 'react', 'idle'].includes(parsed.action)) {
         return parsed;
       }
     }
@@ -284,9 +357,27 @@ function parseDecision(response, context) {
   return { action: 'idle', target: null, topic: null };
 }
 
-function makeFallbackDecision(agent, context) {
+function makeFallbackDecision(agent, context, agentId) {
   // エネルギーが低い → idle
   if (agent.mood.energy < 0.3) return { action: 'idle', target: null, topic: null };
+
+  // ペンディングタスクがある → 最優先でタスク実行
+  if (context.myPendingTasks?.length > 0) {
+    return {
+      action: 'task',
+      target: context.myPendingTasks[0].id,
+      topic: context.myPendingTasks[0].title,
+    };
+  }
+
+  // 未アサインタスクがある → 自発的に取り組む
+  if (context.unassignedTasks?.length > 0) {
+    return {
+      action: 'task',
+      target: context.unassignedTasks[0].id,
+      topic: context.unassignedTasks[0].title,
+    };
+  }
 
   // 外向性が高い → message
   if (agent.personality.extraversion > 0.6 && context.channels.length > 0) {

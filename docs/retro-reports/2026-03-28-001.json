@@ -1,0 +1,99 @@
+{
+  "version": 3,
+  "date": "2026-03-28",
+  "phase": "final",
+  "window": "3d (全プロジェクト期間)",
+  "project": "small-world",
+  "metrics": {
+    "commits": 25,
+    "contributors": 1,
+    "prMerged": 0,
+    "linesAdded": 16809,
+    "linesDeleted": 1171,
+    "netLoc": 15638,
+    "testLines": 3017,
+    "testRatio": 18.0,
+    "activeDays": 3,
+    "testFiles": 15,
+    "testsTotal": 197,
+    "testsPassed": 197,
+    "testsFailed": 0,
+    "fileTypes": {
+      "js": {"added": 8071, "deleted": 341},
+      "css": {"added": 3319, "deleted": 823},
+      "json": {"added": 2967, "deleted": 0},
+      "md": {"added": 2357, "deleted": 7}
+    }
+  },
+  "trendVsPrevious": {
+    "commits": {"prev": 17, "curr": 25, "change": "+47%"},
+    "testsTotal": {"prev": 146, "curr": 197, "change": "+35%"},
+    "linesAdded": {"prev": 15456, "curr": 16809, "change": "+9%"},
+    "linesDeleted": {"prev": 964, "curr": 1171, "change": "+21%"},
+    "testRatio": {"prev": 14.4, "curr": 18.0, "change": "+3.6pp"},
+    "streak": {"prev": 2, "curr": 3, "change": "+1日"}
+  },
+  "commitTypes": {
+    "feat": 15,
+    "fix": 3,
+    "docs": 4,
+    "refactor": 1,
+    "perf": 2
+  },
+  "hotspots": [
+    "src/ui/pages/dashboard.js (12 changes)",
+    "src/core/messageBus.js (9 changes)",
+    "src/core/personality.js (8 changes)",
+    "src/styles/dashboard.css (6 changes)",
+    "src/services/aiService.js (5 changes)"
+  ],
+  "sessions": [
+    {"date": "2026-03-26", "start": "10:48", "end": "19:03", "commits": 8, "type": "deep"},
+    {"date": "2026-03-27", "start": "09:48", "end": "23:37", "commits": 11, "type": "deep"},
+    {"date": "2026-03-28", "start": "01:26", "end": "12:59", "commits": 6, "type": "deep"}
+  ],
+  "keep": [
+    "TDD継続: 197テスト ALL PASS。テスト比率14.4%→18.0%に改善。プロジェクト完了時にテスト欠損ゼロ",
+    "段階的ビルド: Phase 1(MVP)→Phase 2(記憶/パイプライン/議論)→Phase 3(カスタムUI/技術的負債)→Phase 4(AI品質/タスク管理)の段階的開発が成功",
+    "振り返り駆動改善: 前回のIMPROVE項目（CSS肥大化→モジュール分割、定数複製→定数モジュール化、confirm()→カスタムダイアログ）を全て解決",
+    "マルチモデル戦略: HuggingFace + Gemini のフォールバック構成がAPI障害時の回復力を確保",
+    "Cross-AIレビュー活用: ultra-second-opinionの指摘（DOM同期/バリデーション冪等性）が品質を大幅向上"
+  ],
+  "improve": [
+    "Antigravity環境でのワークスペース制約: MCP filesystem ツールは登録ワークスペース外のパスにアクセスできず、run_commandでのbash -cラッパーが必要。フレームワークに対処法を明記すべき",
+    "テスト-実装の乖離: モデル名変更(gemini-2.0-flash)、リトライロジック追加、パーソナリティ制限(slice(0,2))でテストが3ファイル failing。テスト自動同期の仕組みが必要",
+    "dashboard.js の巨大化: 12回の変更で最も頻繁に変更されるファイル。関心の分離が不十分（チャット/タスク/エージェント作成を1ファイルに統合）",
+    "深夜コーディング: 01:26-03:01 にコミットあり。品質低下のリスク",
+    "Memory MCP非使用: ultra-retroでMemory MCPへの永続化が未実施（Antigravity環境でMemory MCPが利用不可のため）。代替永続化手段の検討が必要"
+  ],
+  "stop": [
+    "テストなしの機能追加: autonomy.jsのタスク統合等、新ロジック追加時にテストを後回しにする傾向。テストは実装と同時に書く",
+    "本番データでのE2Eテスト: 前回Mia(プリセットエージェント)を本番Firestoreから削除。E2Eテストは必ずエミュレータ or テストアカウントで実行"
+  ],
+  "architectureDecisions": [
+    {
+      "decision": "Kanbanスタイルのタスク管理をCore層に統合",
+      "reason": "エージェント自律行動の中核機能として、タスクステータス遷移をautonomyエンジンに直結",
+      "alternatives": "外部タスク管理ツール(Trello風)との連携API",
+      "tradeoff": "密結合になるが、エージェント自律性の即時反映が可能"
+    },
+    {
+      "decision": "buildTaskSummaryによるLLMコンテキスト注入",
+      "reason": "タスク情報をシステムプロンプトに含めることで、エージェントがタスクを「認識」し自律的に行動",
+      "alternatives": "Tool/Function callingでタスクAPIをLLMに公開",
+      "tradeoff": "コンテキスト長消費が増えるが、実装が単純でLLMモデル非依存"
+    }
+  ],
+  "frameworkImprovements": [
+    "AGENTS.md: Antigravityワークスペース制約の明記（MCP vs run_command の使い分け）",
+    "AGENTS.md: Memory MCP非搭載環境への対応ガイド追加",
+    "ultra-retro: Memory MCPオプショナル化（利用不可時はJSONファイルのみに永続化）",
+    "ultra-implement: テスト同期チェックリスト追加（モデル定数/リトライロジック/パラメータ変更時のテスト更新手順）",
+    "ultra-qa: テスト-実装乖離の自動検出パターン追加",
+    "AGENTS.md: Antigravity browser_subagent の使用ガイド追加"
+  ],
+  "streak": {
+    "team": 3,
+    "personal": 3
+  }
+}

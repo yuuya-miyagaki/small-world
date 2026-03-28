@@ -28,9 +28,9 @@ describe('AI Service (Gemini)', () => {
   });
 
   describe('MODELS', () => {
-    it('should use Gemini 2.5 Flash for chat', async () => {
+    it('should use Gemini 2.0 Flash for chat', async () => {
       const { MODELS } = await import('../../src/services/aiService.js');
-      expect(MODELS.CHAT).toBe('gemini-2.5-flash');
+      expect(MODELS.CHAT).toBe('gemini-2.0-flash');
     });
   });
 
@@ -49,7 +49,7 @@ describe('AI Service (Gemini)', () => {
       expect(mockGenerateContent).toHaveBeenCalledTimes(1);
 
       const callArgs = mockGenerateContent.mock.calls[0][0];
-      expect(callArgs.model).toBe('gemini-2.5-flash');
+      expect(callArgs.model).toBe('gemini-2.0-flash');
       expect(callArgs.contents).toEqual([
         { role: 'user', parts: [{ text: 'こんにちは' }] },
       ]);

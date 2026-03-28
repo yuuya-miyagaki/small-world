@@ -9,6 +9,7 @@ import { navigate } from '../router.js';
 import { onSnapshot, collection } from 'firebase/firestore';
 import { getFirebaseDb } from '../../config/firebase.js';
 import { MAX_AGENTS } from '../../config/constants.js';
+import { renderTaskBoard, cleanupTaskBoard } from '../components/taskBoard.js';
 
 /** @type {Function|null} */
 let unsubscribeMessages = null;
@@ -60,6 +61,7 @@ export async function renderDashboard(worldId, user) {
     selectedChannel: channels[0] || null,
     messages: [],
     isTyping: false,
+    currentView: 'chat', // 'chat' | 'taskboard'
   };
 
   renderDashboardUI(state);
@@ -114,11 +116,15 @@ function renderDashboardUI(state) {
       <main class="chat-panel">
         <div class="chat-header">
           <span class="chat-header-title"># ${state.selectedChannel?.name || 'general'}</span>
+          <div class="chat-view-tabs">
+            <button class="chat-view-tab active" data-view="chat">💬 チャット</button>
+            <button class="chat-view-tab" data-view="taskboard">📋 タスクボード</button>
+          </div>
           <button class="btn btn-discussion" id="startDiscussionBtn" title="エージェント同士の議論を開始">
             🗣️ 議論
           </button>
-          <button class="btn btn-pipeline" id="startPipelineBtn" title="タスクを分業で実行">
-            ⚙️ タスク
+          <button class="btn btn-pipeline" id="startPipelineBtn" title="クイックタスク（パイプライン）">
+            ⚡ クイック
           </button>
         </div>
 
@@ -161,6 +167,7 @@ function renderDashboardUI(state) {
             <span class="empty-state-text">メッセージがまだありません。<br>エージェントに話しかけてみましょう！</span>
           </div>
         </div>
+        <div id="taskBoardContainer" style="display: none; flex: 1; overflow: hidden;"></div>
         <div id="typingIndicator" class="chat-typing" style="display: none;">
           <div class="typing-dots"><span></span><span></span><span></span></div>
           <span id="typingName">考え中...</span>
@@ -548,6 +555,9 @@ function bindDashboardEvents(state) {
 
   // Agent Delete
   bindDeleteAgentButton(state);
+
+  // View tabs (chat / taskboard)
+  bindViewTabs(state);
 }
 
 function setupRealtimeListeners(state) {
@@ -633,6 +643,7 @@ function hideTyping() {
 
 function cleanup() {
   stopAllHeartbeats();
+  cleanupTaskBoard();
   if (unsubscribeMessages) { unsubscribeMessages(); unsubscribeMessages = null; }
   if (unsubscribeAgents) { unsubscribeAgents(); unsubscribeAgents = null; }
 }
@@ -1141,5 +1152,58 @@ function bindDeleteAgentButton(state) {
       deleteBtn.disabled = false;
       deleteBtn.textContent = '🗑️ ' + agentName + ' を削除';
     }
+  });
+}
+
+// ============================================================
+// View Tabs — チャット / タスクボード 切り替え
+// ============================================================
+
+/**
+ * ビュータブの切り替えイベントをバインドする
+ * @param {Object} state - ダッシュボード状態
+ */
+function bindViewTabs(state) {
+  document.querySelectorAll('.chat-view-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const view = tab.dataset.view;
+      if (view === state.currentView) return;
+
+      state.currentView = view;
+
+      // タブのアクティブ状態を更新
+      document.querySelectorAll('.chat-view-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // 表示切り替え
+      const chatMessages = document.getElementById('chatMessages');
+      const taskBoardContainer = document.getElementById('taskBoardContainer');
+      const typingIndicator = document.getElementById('typingIndicator');
+      const chatInputArea = document.querySelector('.chat-input-area');
+      const discussionProgress = document.getElementById('discussionProgress');
+
+      if (view === 'taskboard') {
+        // タスクボード表示
+        if (chatMessages) chatMessages.style.display = 'none';
+        if (typingIndicator) typingIndicator.style.display = 'none';
+        if (chatInputArea) chatInputArea.style.display = 'none';
+        if (discussionProgress) discussionProgress.style.display = 'none';
+        if (taskBoardContainer) {
+          taskBoardContainer.style.display = 'flex';
+          renderTaskBoard(taskBoardContainer, {
+            worldId: state.worldId,
+            user: state.user,
+            agents: state.agents,
+            channels: state.channels,
+          });
+        }
+      } else {
+        // チャット表示
+        if (chatMessages) chatMessages.style.display = '';
+        if (chatInputArea) chatInputArea.style.display = '';
+        if (taskBoardContainer) taskBoardContainer.style.display = 'none';
+        cleanupTaskBoard();
+      }
+    });
   });
 }
